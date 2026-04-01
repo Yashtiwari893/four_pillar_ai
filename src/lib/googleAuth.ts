@@ -5,34 +5,37 @@ export function createGoogleJwt(scopes: string[] = []) {
   let key = process.env.GOOGLE_PRIVATE_KEY;
 
   if (key) {
-    key = key.trim();
+    let finalKey = key.trim();
 
     // 1. Detect if it's a full JSON service account
-    if (key.startsWith("{")) {
+    if (finalKey.startsWith("{")) {
       try {
         console.info("Google Auth: Detected JSON service account, extracting private_key.");
-        const json = JSON.parse(key);
-        key = json.private_key || key;
+        const json = JSON.parse(finalKey);
+        if (json.private_key) {
+          finalKey = json.private_key;
+        }
       } catch (err) {
         console.error("Google Auth: Failed to parse GOOGLE_PRIVATE_KEY as JSON", err);
       }
     }
 
     // 2. Strip surrounding quotes (if any)
-    key = key.replace(/^"|"$/g, "");
+    finalKey = finalKey.replace(/^"|"$/g, "");
 
     // 3. Find the actual start of the PEM key (handles cases where junk is before it)
-    const beginIndex = key.indexOf("-----BEGIN");
+    const beginIndex = finalKey.indexOf("-----BEGIN");
     if (beginIndex > -1) {
-      key = key.substring(beginIndex);
+      finalKey = finalKey.substring(beginIndex);
     } else {
       console.warn("GOOGLE_PRIVATE_KEY does not contain -----BEGIN");
     }
 
     // 4. Handle escaped newlines (\n) and normalize Windows-style CRLF
-    key = key.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
+    finalKey = finalKey.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
 
-    console.info(`Google Auth: Key prepared, length: ${key.length}`);
+    console.info(`Google Auth: Key prepared, length: ${finalKey.length}`);
+    key = finalKey;
   } else {
     console.warn("GOOGLE_PRIVATE_KEY is missing from environment variables.");
   }

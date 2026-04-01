@@ -14,6 +14,15 @@ export async function readGoogleSheet(sheetId: string, range: string = "Sheet1")
   return res.data.values || [];
 }
 
+export async function getSpreadsheetSheets(spreadsheetId: string): Promise<string[]> {
+  const sheets = google.sheets({ version: "v4", auth });
+  const res = await sheets.spreadsheets.get({
+    spreadsheetId,
+  });
+
+  return res.data.sheets?.map(s => s.properties?.title).filter((t): t is string => !!t) || [];
+}
+
 // Legacy function for backward compatibility
 export async function readGoogleSheetAsStrings(sheetId: string): Promise<string[]> {
   const rows = await readGoogleSheet(sheetId);

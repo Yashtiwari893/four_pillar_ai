@@ -72,77 +72,58 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log(`Reading Google Sheet: ${sheetMapping.sheet_id}`);
+    console.log(`Reading Google Spreadsheet: ${sheetMapping.sheet_id}`);
 
-    // 2️⃣ Read current Google Sheet data
-    let sheetData;
-    try {
-      sheetData = await readGoogleSheet(sheetMapping.sheet_id, "A1:Z10000"); // Read up to 10k rows
-    } catch (sheetError: any) {
-      console.error("Google Sheets API error:", sheetError);
-
-      // Handle specific Google API errors
-      if (sheetError.code === 403) {
-        return NextResponse.json(
-          { error: "Google Sheet access denied. Please share the sheet with the service account email." },
-          { status: 403 }
-        );
-      }
-
-      if (sheetError.code === 404) {
-        return NextResponse.json(
-          { error: "Google Sheet not found. Please check the sheet URL." },
-          { status: 404 }
-        );
-      }
-
-      // For other errors, return 500 as unexpected
-      return NextResponse.json(
-        { error: "Failed to read Google Sheet" },
-        { status: 500 }
-      );
-    }
-
-    if (!sheetData || sheetData.length <= 1) { // Must have at least header + 1 data row
-      return NextResponse.json({
-        totalRows: 0,
-        newRows: 0,
-        deletedRows: 0,
-        lastSyncedAt: new Date().toISOString()
-      });
-    }
-
-    // 3️⃣ Process sheet data - skip header row, create hashes
-    const dataRows = sheetData.slice(1); // Skip header row
-    const currentSheetHashes = new Set<string>();
+    const { getSpreadsheetSheets } = await import("@/lib/googleSheet");
+    const allSheetNames = await getSpreadsheetSheets(sheetMapping.sheet_id);
+    console.log(`Found ${allSheetNames.length} sheets: ${allSheetNames.join(", ")}`);
 
     const rowData: Array<{
       hash: string;
       content: string;
     }> = [];
 
-    dataRows.forEach((row) => {
-      // Convert row to string (join non-empty cells with " | ")
-      const rowString = row
-        .map(cell => (cell || "").toString().trim())
-        .filter(cell => cell.length > 0)
-        .join(" | ");
-
-      if (rowString.trim()) {
-        // Generate SHA256 hash
-        const hash = createHash('sha256')
-          .update(rowString)
-          .digest('hex');
-
-        currentSheetHashes.add(hash);
-        rowData.push({
-          hash,
-          content: rowString
-        });
+    for (const tabName of allSheetNames) {
+      console.log(`Processing sheet: ${tabName}`);
+      let sheetData;
+      try {
+        sheetData = await readGoogleSheet(sheetMapping.sheet_id, `${tabName}!A1:Z5000`);
+      } catch (err) {
+        console.error(`Error reading sheet ${tabName}:`, err);
+        continue;
       }
-    });
 
-    console.log(`Found ${rowData.length} data rows in sheet`);
+      if (!sheetData || sheetData.length <= 1) continue;
+
+      const dataRows = sheetData.slice(1); // Skip header row
+      dataRows.forEach((row) => {
+        // Convert row to string (join non-empty cells with " | ")
+        const rowString = row
+          .map(cell => (cell || "").toString().trim())
+          .filter(cell => cell.length > 0)
+          .join(" | ");
+
+        if (rowString.trim()) {
+          // Include tab name in content for context
+          const finalContent = `[Source: ${tabName}] ${rowString}`;
+          
+          // Generate SHA256 hash (including tab name to differentiate same data on different tabs)
+          const hash = createHash('sha256')
+            .update(finalContent)
+            .digest('hex');
+
+          rowData.push({
+            hash,
+            content: finalContent
+          });
+        }
+      });
+    }
+
+    console.log(`Total data rows across all sheets: ${rowData.length}`);
+
+    // 3️⃣ Create a set of current hashes for comparison
+    const currentSheetHashes = new Set(rowData.map(r => r.hash));
 
     // 4️⃣ Get existing chunks for this phone number and source
     let existingChunks: Array<{ id: string; row_hash: string; content: string }> = [];

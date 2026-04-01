@@ -173,11 +173,11 @@ export default function FilesPage() {
                 </p>
                 <div className="flex items-center gap-2 bg-white p-2 rounded border border-blue-300">
                     <code className="text-xs font-mono text-blue-900 flex-1">
-                        https://whatsapp-ai-chatbot-google-sheet-in.vercel.app/api/webhook/whatsapp
+                        https://four-pillar-ai.vercel.app/api/webhook/whatsapp
                     </code>
                     <button
                         onClick={() => {
-                            navigator.clipboard.writeText("https://whatsapp-ai-chatbot-google-sheet-in.vercel.app/api/webhook/whatsapp");
+                            navigator.clipboard.writeText("https://four-pillar-ai.vercel.app/api/webhook/whatsapp");
                             alert("Webhook URL copied to clipboard!");
                         }}
                         className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"

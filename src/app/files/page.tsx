@@ -8,22 +8,23 @@ import { SyncGoogleSheetButton } from "@/components/ui/sync-google-sheet-button"
 import { SaveGoogleSheet } from "@/components/ui/save-google-sheet";
 import { SyncGoogleDocButton } from "@/components/ui/sync-google-doc-button";
 import { SaveGoogleDoc } from "@/components/ui/save-google-doc";
-import { 
-  Smartphone, 
-  Plus, 
-  Trash2, 
-  Settings, 
-  FileText, 
-  Database, 
-  Globe, 
-  Key, 
-  Sparkles, 
-  Zap, 
-  Code,
-  LayoutDashboard,
-  ShieldCheck,
-  Link as LinkIcon,
-  RefreshCcw
+import {
+    Smartphone,
+    Plus,
+    Trash2,
+    Settings,
+    FileText,
+    Database,
+    Globe,
+    Key,
+    Sparkles,
+    Zap,
+    Code,
+    LayoutDashboard,
+    ShieldCheck,
+    Link as LinkIcon,
+    RefreshCcw,
+    Bot
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -150,7 +151,7 @@ export default function FilesPage() {
             setEditSystemPrompt(data.system_prompt);
             setEditIntent(data.intent);
 
-            alert("System prompt generated and saved successfully!");
+            alert("System prompt generated successfully!");
             await loadPhoneGroups();
 
             if (isNewPhone) {
@@ -215,7 +216,7 @@ export default function FilesPage() {
     }
 
     async function deletePhoneNumber(phoneNum: string) {
-        if (!confirm("Delete this phone set?")) return;
+        if (!confirm("Delete this bot configuration?")) return;
         try {
             const res = await fetch(`/api/phone-mappings?phone_number=${phoneNum}`, { method: "DELETE" });
             if (res.ok) {
@@ -246,7 +247,7 @@ export default function FilesPage() {
                 }),
             });
             if (res.ok) {
-                alert("Settings synced.");
+                alert("Settings saved successfully.");
                 await loadPhoneGroups();
             }
         } catch (err) {
@@ -259,303 +260,302 @@ export default function FilesPage() {
     const selectedGroup = phoneGroups.find(g => g.phone_number === selectedPhoneNumber);
 
     return (
-        <div className="flex h-screen bg-background overflow-hidden relative">
-            {/* Left Sidebar */}
-            <aside className="w-72 bg-white/60 backdrop-blur-3xl border-r border-black/5 flex flex-col z-20 overflow-hidden shrink-0">
-                <div className="p-8 flex items-center gap-3 border-b border-slate-100">
-                    <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white shadow-sm">
-                        <Database size={20} />
+        <div className="flex h-screen bg-[#f8fafc] overflow-hidden">
+            {/* Sidebar */}
+            <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
+                <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[#2563eb] flex items-center justify-center text-white shadow-sm">
+                        <Bot size={18} />
                     </div>
                     <div>
-                        <h1 className="font-bold text-lg tracking-tight text-slate-900 leading-none">AuraChat</h1>
-                        <p className="text-[10px] font-medium text-slate-500 mt-1">Admin Dashboard</p>
+                        <h1 className="font-bold text-base text-slate-900 leading-none">AuraChat</h1>
+                        <p className="text-[10px] font-medium text-slate-500 mt-1">v1.2 Admin</p>
                     </div>
                 </div>
 
-                <div className="p-6 flex-1 overflow-y-auto space-y-8 mt-6">
-                    <div className="px-2">
-                        <Button onClick={handleNewPhone} className="w-full gap-2 rounded-xl py-6 bg-primary text-white font-semibold text-sm hover:translate-y-[-1px] transition-all shadow-md shadow-primary/10" variant="default">
-                            <Plus size={18} />
-                            Add WhatsApp Bot
-                        </Button>
-                    </div>
+                <div className="p-4 flex-1 overflow-y-auto space-y-6">
+                    <Button
+                        onClick={handleNewPhone}
+                        className="w-full gap-2 rounded-lg py-5 bg-[#2563eb] text-white font-semibold text-xs transition-all shadow-sm shadow-blue-100"
+                    >
+                        <Plus size={16} />
+                        Add New Bot
+                    </Button>
 
-                    <div className="space-y-4">
-                        <label className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em] px-4 mb-2 block">Active Nodes</label>
-                        <div className="space-y-1.5 px-2">
-                            {phoneGroups.map((group) => (
-                                <button
-                                    key={group.phone_number}
-                                    onClick={() => setSelectedPhoneNumber(group.phone_number)}
-                                    className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between group ${
-                                        selectedPhoneNumber === group.phone_number
-                                            ? "bg-white border-slate-200 shadow-sm text-slate-900"
-                                            : "bg-transparent border-transparent hover:bg-slate-100 text-slate-500"
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-2 block">Your Bots</label>
+                        {phoneGroups.map((group) => (
+                            <button
+                                key={group.phone_number}
+                                onClick={() => setSelectedPhoneNumber(group.phone_number)}
+                                className={`w-full text-left px-3 py-2 rounded-lg transition-all flex items-center justify-between group ${selectedPhoneNumber === group.phone_number
+                                        ? "bg-blue-50 text-[#2563eb]"
+                                        : "hover:bg-slate-50 text-slate-600"
                                     }`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <Smartphone size={16} className={selectedPhoneNumber === group.phone_number ? "text-primary" : "text-slate-400"} />
-                                        <span className="text-sm font-medium tracking-tight truncate max-w-[120px]">{group.phone_number}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{group.files.length}</span>
-                                        {selectedPhoneNumber === group.phone_number && (
-                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                                        )}
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
+                            >
+                                <div className="flex items-center gap-2.5">
+                                    <Smartphone size={14} className={selectedPhoneNumber === group.phone_number ? "text-[#2563eb]" : "text-slate-400"} />
+                                    <span className="text-xs font-medium truncate max-w-[100px]">{group.phone_number}</span>
+                                </div>
+                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${selectedPhoneNumber === group.phone_number ? "bg-blue-100" : "bg-slate-100"}`}>
+                                    {group.files.length}
+                                </span>
+                            </button>
+                        ))}
                     </div>
                 </div>
 
-                <div className="p-8 border-t border-black/5 bg-black/[0.02]">
+                <div className="p-4 border-t border-slate-100">
                     <Link href="/chat">
-                        <Button variant="ghost" className="w-full justify-start gap-4 rounded-2xl py-6 hover:bg-white text-foreground/40 hover:text-primary transition-all font-black text-[10px] uppercase tracking-widest">
-                            <LayoutDashboard size={20} className="text-primary/40 group-hover:text-primary" />
-                            <span>Dashboard</span>
+                        <Button variant="ghost" className="w-full justify-start gap-3 rounded-lg py-5 hover:bg-slate-50 text-slate-500 text-xs font-semibold">
+                            <LayoutDashboard size={16} />
+                            Go to Console
                         </Button>
                     </Link>
                 </div>
             </aside>
 
-            {/* Main Content */}
-            <main className="flex-1 overflow-y-auto relative z-10 py-16">
-                <div className="section-container">
+            {/* Main Area */}
+            <main className="flex-1 overflow-y-auto">
+                <div className="max-w-5xl mx-auto py-12 px-8">
                     {selectedPhoneNumber || isNewPhone ? (
-                        <div className="animate-in fade-in duration-500">
-                            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 border-b border-slate-100 pb-10">
-                                <div className="space-y-2">
-                                    <h2 className="text-3xl font-bold tracking-tight text-slate-900">
-                                        {isNewPhone ? "Register New Bot" : "Bot Management"}
+                        <div className="animate-in fade-in duration-300">
+                            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 pb-6 border-b border-slate-200">
+                                <div className="space-y-1">
+                                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+                                        {isNewPhone ? "Bot Initializer" : "Bot Settings"}
                                     </h2>
-                                    <p className="text-slate-500 font-medium text-base">
-                                        Configure your AI assistant settings and manage its knowledge base.
+                                    <p className="text-slate-500 font-medium text-sm">
+                                        Configure logic, API keys, and knowledge sources.
                                     </p>
                                 </div>
                                 {selectedPhoneNumber && (
-                                    <Button onClick={() => deletePhoneNumber(selectedPhoneNumber)} variant="ghost" className="text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all rounded-lg px-4 h-10 border border-transparent hover:border-red-100 text-xs font-semibold">
+                                    <Button onClick={() => deletePhoneNumber(selectedPhoneNumber)} variant="ghost" className="text-slate-400 hover:text-red-600 hover:bg-red-50 text-xs font-semibold h-9 px-4">
                                         <Trash2 size={16} className="mr-2" />
                                         Delete Bot
                                     </Button>
                                 )}
                             </header>
 
-                             <Tabs defaultValue="configuration" className="w-full">
-                                <TabsList className="bg-slate-100/50 border border-slate-200 p-1 rounded-xl h-auto gap-1 mb-10 w-fit flex">
-                                    <TabsTrigger value="configuration" className="rounded-lg px-6 py-2.5 data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all font-semibold text-sm flex items-center gap-2">
-                                        <Settings size={16} />
-                                        Settings
+                            <Tabs defaultValue="configuration" className="w-full">
+                                <TabsList className="bg-slate-100 border border-slate-200 p-1 rounded-lg h-auto gap-0.5 mb-8 w-fit flex shadow-sm">
+                                    <TabsTrigger value="configuration" className="rounded px-4 py-2 data-[state=active]:bg-white data-[state=active]:text-[#2563eb] data-[state=active]:shadow-sm transition-all font-semibold text-xs flex items-center gap-2">
+                                        <Settings size={14} />
+                                        Configuration
                                     </TabsTrigger>
-                                    <TabsTrigger value="files" className="rounded-lg px-6 py-2.5 data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm transition-all font-semibold text-sm flex items-center gap-2">
-                                        <Database size={16} />
+                                    <TabsTrigger value="files" className="rounded px-4 py-2 data-[state=active]:bg-white data-[state=active]:text-[#2563eb] data-[state=active]:shadow-sm transition-all font-semibold text-xs flex items-center gap-2">
+                                        <Database size={14} />
                                         Knowledge Base
                                     </TabsTrigger>
                                 </TabsList>
 
-                                <TabsContent value="configuration" className="space-y-12 animate-in fade-in slide-in-from-bottom-10 pt-4">
-                                    {/* System Config Card */}
-                                    <div className="glass-card p-12 space-y-10 group/card">
-                                        <div className="flex items-center gap-6">
-                                            <div className="w-14 h-14 rounded-2xl bg-black/5 border border-black/5 flex items-center justify-center group-hover/card:scale-105 transition-transform duration-700">
-                                                <Smartphone size={24} className="text-foreground/40" />
+                                <TabsContent value="configuration" className="space-y-8 pb-20">
+                                    {/* Bot Identity Card */}
+                                    <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm space-y-8">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+                                                <Smartphone size={20} />
                                             </div>
                                             <div>
-                                                <h3 className="text-2xl font-black tracking-tight text-foreground">Linguistic Identity</h3>
-                                                <p className="text-foreground/20 text-[8px] font-bold uppercase tracking-[0.4em] mt-1.5">Core Vector Parameters</p>
+                                                <h3 className="text-lg font-bold text-slate-900">Bot Identity</h3>
+                                                <p className="text-slate-400 text-xs">Primary connection parameters.</p>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-                                            <div className="space-y-4">
-                                                <label className="text-[9px] font-bold uppercase tracking-[0.3em] px-1 text-foreground/30">WhatsApp Protocol ID</label>
-                                                <div className="relative group/input">
-                                                    <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none text-foreground/10 group-focus-within/input:text-foreground transition-colors">
-                                                        <LinkIcon size={16} />
-                                                    </div>
-                                                    <input
-                                                        type="text"
-                                                        value={editPhoneNumber}
-                                                        onChange={(e) => setEditPhoneNumber(e.target.value)}
-                                                        disabled={!isNewPhone}
-                                                        className="w-full bg-black/[0.02] border-black/5 rounded-[1.5rem] pl-16 pr-8 py-8 focus:outline-none focus:bg-white focus:ring-4 focus:ring-black/5 transition-all font-mono text-base font-bold disabled:opacity-30 border"
-                                                        placeholder="15551234567"
-                                                    />
-                                                </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-slate-500 px-1">WhatsApp Number</label>
+                                                <input
+                                                    type="text"
+                                                    value={editPhoneNumber}
+                                                    onChange={(e) => setEditPhoneNumber(e.target.value)}
+                                                    disabled={!isNewPhone}
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all text-sm font-medium disabled:opacity-50"
+                                                    placeholder="e.g. 15550001234"
+                                                />
                                             </div>
-                                            <div className="space-y-4">
-                                                <label className="text-[9px] font-bold uppercase tracking-[0.3em] px-1 text-foreground/30">Intelligence Intent</label>
-                                                <div className="flex gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-slate-500 px-1">Bot Persona / Intent</label>
+                                                <div className="flex gap-2">
                                                     <input
                                                         type="text"
                                                         value={editIntent}
                                                         onChange={(e) => setEditIntent(e.target.value)}
-                                                        className="flex-1 bg-black/[0.02] border-black/5 rounded-[1.5rem] px-8 py-8 focus:outline-none focus:bg-white focus:ring-4 focus:ring-black/5 transition-all font-bold text-foreground placeholder:text-foreground/10 border"
-                                                        placeholder="e.g. Portfolio Manager"
+                                                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all text-sm font-medium"
+                                                        placeholder="e.g. Real Estate Agent"
                                                     />
-                                                    <Button onClick={generateSystemPrompt} disabled={generatingPrompt} className="bg-foreground text-white hover:bg-black px-12 rounded-[1.5rem] font-bold text-[9px] uppercase tracking-[0.2em] shadow-xl shadow-black/10 transition-all">
-                                                        {generatingPrompt ? <RefreshCcw className="animate-spin" /> : "Synthesize"}
+                                                    <Button onClick={generateSystemPrompt} disabled={generatingPrompt} className="bg-slate-900 text-white px-6 rounded-lg text-xs font-bold transition-all">
+                                                        {generatingPrompt ? <RefreshCcw size={14} className="animate-spin" /> : "Auto-Gen"}
                                                     </Button>
                                                 </div>
                                             </div>
                                         </div>
 
                                         {editSystemPrompt && (
-                                            <div className="space-y-6 pt-16 border-t border-black/5 animate-in fade-in slide-in-from-top-4 duration-700">
+                                            <div className="space-y-3 pt-6 border-t border-slate-100">
                                                 <div className="flex items-center justify-between px-1">
-                                                    <label className="text-[9px] font-bold uppercase tracking-[0.4em] text-foreground/30 flex items-center gap-4">
-                                                        <Code size={14} className="text-emerald-400" /> Behavioral Logic Schema
-                                                    </label>
-                                                    <span className="text-[8px] font-bold text-emerald-500 bg-emerald-50 px-3 py-1.5 rounded-full uppercase tracking-widest border border-emerald-100">Live Runtime</span>
+                                                    <label className="text-xs font-semibold text-slate-500">System Prompt</label>
+                                                    <span className="text-[10px] font-bold text-[#2563eb] bg-blue-50 px-2.5 py-1 rounded-full uppercase border border-blue-100">Active Behavior</span>
                                                 </div>
-                                                <div className="relative group/text">
-                                                    <textarea
-                                                        value={editSystemPrompt}
-                                                        onChange={(e) => setEditSystemPrompt(e.target.value)}
-                                                        rows={12}
-                                                        className="w-full bg-black/[0.01] border border-black/5 rounded-[3rem] px-12 py-12 focus:outline-none focus:bg-white focus:ring-8 focus:ring-black/5 transition-all text-sm font-medium leading-relaxed text-foreground/60 shadow-inner"
-                                                    />
-                                                    <div className="absolute top-12 right-12 text-foreground/5 group-focus-within/text:text-foreground/10 transition-colors">
-                                                        <Sparkles size={40} />
-                                                    </div>
-                                                </div>
+                                                <textarea
+                                                    value={editSystemPrompt}
+                                                    onChange={(e) => setEditSystemPrompt(e.target.value)}
+                                                    rows={10}
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-6 py-4 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all text-sm font-medium leading-relaxed text-slate-600 shadow-inner"
+                                                    placeholder="Define how the AI should behave..."
+                                                />
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* Security & API Card */}
-                                    <div className="glass-card p-12 space-y-12 group/sec">
-                                        <div className="flex items-center gap-6">
-                                            <div className="w-14 h-14 rounded-2xl bg-black/5 border border-black/5 flex items-center justify-center text-foreground/40">
-                                                <ShieldCheck size={24} />
+                                    {/* Connection & Security Card */}
+                                    <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm space-y-8">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+                                                <ShieldCheck size={20} />
                                             </div>
                                             <div>
-                                                <h3 className="text-2xl font-black tracking-tight text-foreground">Encrypted Pipeline</h3>
-                                                <p className="text-foreground/20 text-[8px] font-bold uppercase tracking-[0.4em] mt-1.5">Authorization & Security Nodes</p>
+                                                <h3 className="text-lg font-bold text-slate-900">Connections</h3>
+                                                <p className="text-slate-400 text-xs">Auth tokens and web endpoints.</p>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-                                            <div className="space-y-4">
-                                                <label className="text-[9px] font-bold uppercase tracking-[0.3em] px-1 text-foreground/30">Root Auth Token</label>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-slate-500 px-1">Auth Token</label>
                                                 <input
                                                     type="password"
                                                     value={editAuthToken}
                                                     onChange={(e) => setEditAuthToken(e.target.value)}
-                                                    className="w-full bg-black/[0.02] border border-black/5 rounded-[1.5rem] px-8 py-8 focus:outline-none focus:bg-white focus:ring-4 focus:ring-black/5 transition-all font-mono font-bold"
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all text-sm font-medium"
+                                                    placeholder="Enter secret token"
                                                 />
                                             </div>
-                                            <div className="space-y-4">
-                                                <label className="text-[9px] font-bold uppercase tracking-[0.3em] px-1 text-foreground/30">Operational Endpoint</label>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-slate-500 px-1">Web Origin / API Base</label>
                                                 <input
                                                     type="text"
                                                     value={editOrigin}
                                                     onChange={(e) => setEditOrigin(e.target.value)}
-                                                    placeholder="https://vortex.ai/..."
-                                                    className="w-full bg-black/[0.02] border border-black/5 rounded-[1.5rem] px-8 py-8 focus:outline-none focus:bg-white focus:ring-4 focus:ring-black/5 transition-all font-bold text-foreground border"
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all text-sm font-medium"
+                                                    placeholder="https://your-api.com"
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="pt-16 border-t border-black/5">
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-                                                {[
-                                                    { label: "Neural Gemini", val: editGeminiKey, set: setEditGeminiKey, color: "text-blue-500" },
-                                                    { label: "Logical Groq", val: editGroqKey, set: setEditGroqKey, color: "text-orange-500" },
-                                                    { label: "Semantic Mistral", val: editMistralKey, set: setEditMistralKey, color: "text-emerald-500" }
-                                                ].map((api) => (
-                                                    <div key={api.label} className="space-y-4 p-8 rounded-[2rem] bg-black/[0.01] border border-black/5 hover:bg-white transition-all duration-500 shadow-sm hover:shadow-xl hover:shadow-black/5">
-                                                        <div className="flex items-center gap-4 mb-2">
-                                                            <div className="w-10 h-10 rounded-2xl bg-white shadow-sm border border-black/5 flex items-center justify-center">
-                                                                <Key size={16} className={api.color} />
-                                                            </div>
-                                                            <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-foreground/40">{api.label}</span>
-                                                        </div>
-                                                        <input type="password" value={api.val} onChange={e=>api.set(e.target.value)} className="w-full bg-transparent border-transparent px-2 text-foreground font-mono text-sm focus:outline-none" placeholder="••••••••••••" />
-                                                    </div>
-                                                ))}
-                                            </div>
+                                        <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            {[
+                                                { label: "Gemini Key", val: editGeminiKey, set: setEditGeminiKey },
+                                                { label: "Groq Key", val: editGroqKey, set: setEditGroqKey },
+                                                { label: "Mistral Key", val: editMistralKey, set: setEditMistralKey }
+                                            ].map((api) => (
+                                                <div key={api.label} className="space-y-2">
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{api.label}</label>
+                                                    <input
+                                                        type="password"
+                                                        value={api.val}
+                                                        onChange={e => api.set(e.target.value)}
+                                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs font-medium focus:ring-2 focus:ring-blue-100 focus:bg-white focus:outline-none transition-all"
+                                                        placeholder="sk-..."
+                                                    />
+                                                </div>
+                                            ))}
                                         </div>
 
-                                        <Button onClick={savePhoneSettings} disabled={savingSettings || isNewPhone} className="w-full py-12 rounded-[3rem] bg-foreground text-white font-bold uppercase tracking-[0.4em] text-[12px] shadow-3xl shadow-black/20 hover:translate-y-[-2px] active:translate-y-[1px] transition-all">
-                                            {savingSettings ? <RefreshCcw className="animate-spin mr-6" /> : <Zap size={24} className="mr-6 fill-white" />}
-                                            {savingSettings ? "Committing Logic..." : "Commit Operational Settings"}
-                                        </Button>
+                                        <div className="pt-6">
+                                            <Button
+                                                onClick={savePhoneSettings}
+                                                disabled={savingSettings || isNewPhone}
+                                                className="w-full py-6 rounded-lg bg-[#2563eb] text-white font-bold text-sm shadow-md shadow-blue-100 hover:translate-y-[-1px] active:translate-y-[0px] transition-all"
+                                            >
+                                                {savingSettings ? <RefreshCcw className="animate-spin mr-2" size={16} /> : <Zap className="mr-2" size={16} />}
+                                                {savingSettings ? "Saving..." : "Save Bot Configuration"}
+                                            </Button>
+                                        </div>
                                     </div>
                                 </TabsContent>
 
-                                <TabsContent value="files" className="space-y-12 animate-in fade-in slide-in-from-bottom-10 pt-4">
-                                    {/* Webhook Tooltip Card */}
-                                    <div className="glass-card p-12 flex flex-col md:flex-row items-center gap-12 group/hand">
-                                        <div className="flex-1 space-y-4">
-                                            <div className="flex items-center gap-5">
-                                                <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center text-foreground/40 group-hover/hand:scale-110 transition-transform">
-                                                    <Globe size={22} />
-                                                </div>
-                                                <h4 className="text-2xl font-black text-foreground tracking-tight">Endpoint Handshake</h4>
-                                            </div>
-                                            <p className="text-foreground/20 text-[9px] font-bold uppercase tracking-[0.3em] pl-1">Map 11za webhooks to this secure node for operational logic sync.</p>
+                                <TabsContent value="files" className="space-y-8 pb-20">
+                                    {/* Webhook Card */}
+                                    <div className="bg-blue-600 rounded-xl p-8 shadow-md text-white flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                                            <Globe size={160} />
                                         </div>
-                                        <div className="flex items-center gap-5 bg-black/[0.02] p-4 rounded-[2rem] border border-black/5 w-full md:w-auto min-w-[500px] shadow-inner group/code">
-                                            <code className="text-[10px] font-mono font-bold text-foreground/40 px-6 flex-1 truncate">https://vortex-agent.com/api/webhook</code>
-                                            <Button variant="ghost" size="sm" onClick={() => {navigator.clipboard.writeText("https://vortex-agent.com/api/webhook"); alert("Copied!");}} className="h-14 px-10 rounded-[1.2rem] bg-white text-foreground font-bold text-[9px] uppercase tracking-[0.2em] shadow-xl shadow-black/5 border border-transparent hover:border-black/5 transition-all">Copy Hash</Button>
+                                        <div className="flex-1 space-y-4 relative z-10 text-center md:text-left">
+                                            <div className="flex items-center gap-3 justify-center md:justify-start">
+                                                <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                                                    <Globe size={20} />
+                                                </div>
+                                                <h4 className="text-lg font-bold tracking-tight">Webhook Handshake</h4>
+                                            </div>
+                                            <p className="text-blue-100 text-xs font-medium">Connect your WhatsApp provider (like 11za) to this secure endpoint.</p>
+                                        </div>
+                                        <div className="flex items-center gap-4 bg-white/10 p-2 rounded-lg border border-white/20 w-full md:w-auto relative z-10 shadow-inner">
+                                            <code className="text-[11px] font-mono font-medium px-4 flex-1 truncate max-w-[300px]">https://aura-chat.com/api/webhook</code>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => { navigator.clipboard.writeText("https://aura-chat.com/api/webhook"); alert("Copied!"); }}
+                                                className="h-10 px-6 rounded-md bg-white text-blue-600 font-bold text-[10px] uppercase tracking-wider shadow-sm hover:bg-slate-50 transition-all border-none"
+                                            >
+                                                Copy
+                                            </Button>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                                        {/* Cloud Sync Cards */}
-                                        <div className="glass-card p-10 space-y-10 group/sheet">
-                                            <div className="flex items-center gap-6">
-                                                <div className="w-14 h-14 rounded-2xl bg-black/5 border border-black/5 flex items-center justify-center text-foreground/40 group-hover/sheet:scale-105 transition-transform duration-700">
-                                                    <LayoutDashboard size={24} />
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="bg-white border border-slate-200 p-8 rounded-xl space-y-8 shadow-sm">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center">
+                                                    <LayoutDashboard size={20} />
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-xl font-bold text-foreground">Sheet Sync</h3>
-                                                    <p className="text-foreground/20 text-[8px] font-bold uppercase tracking-[0.4em] mt-1.5 pl-0.5">Structured Archive</p>
+                                                    <h3 className="text-lg font-bold text-slate-900">Google Sheets</h3>
+                                                    <p className="text-slate-400 text-xs">Sync structured data tables.</p>
                                                 </div>
                                             </div>
-                                            <div className="bg-emerald-50/30 p-8 rounded-[2rem] border border-emerald-500/10">
+                                            <div className="bg-slate-50 p-6 rounded-lg border border-slate-100">
                                                 <SaveGoogleSheet phoneNumber={selectedPhoneNumber!} />
                                             </div>
                                             <SyncGoogleSheetButton phoneNumber={selectedPhoneNumber!} />
                                         </div>
 
-                                        <div className="glass-card p-10 space-y-10 group/doc">
-                                            <div className="flex items-center gap-6">
-                                                <div className="w-14 h-14 rounded-2xl bg-black/5 border border-black/5 flex items-center justify-center text-foreground/40 group-hover/doc:scale-105 transition-transform duration-700">
-                                                    <FileText size={24} />
+                                        <div className="bg-white border border-slate-200 p-8 rounded-xl space-y-8 shadow-sm">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center">
+                                                    <FileText size={20} />
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-xl font-bold text-foreground">Doc Injection</h3>
-                                                    <p className="text-foreground/20 text-[8px] font-bold uppercase tracking-[0.4em] mt-1.5 pl-0.5">Semantic Clustered</p>
+                                                    <h3 className="text-lg font-bold text-slate-900">Google Docs</h3>
+                                                    <p className="text-slate-400 text-xs">Sync long-form documents.</p>
                                                 </div>
                                             </div>
-                                            <div className="bg-blue-50/30 p-8 rounded-[2rem] border border-blue-500/10">
+                                            <div className="bg-slate-50 p-6 rounded-lg border border-slate-100">
                                                 <SaveGoogleDoc phoneNumber={selectedPhoneNumber!} />
                                             </div>
                                             <SyncGoogleDocButton phoneNumber={selectedPhoneNumber!} />
                                         </div>
                                     </div>
 
-                                    {/* Local File Uplink */}
-                                    <div className="glass-card p-12 space-y-12">
+                                    {/* File Upload */}
+                                    <div className="bg-white border border-slate-200 p-8 rounded-xl shadow-sm space-y-8">
                                         <div className="flex justify-between items-center">
-                                            <div className="flex items-center gap-6">
-                                                <div className="w-14 h-14 rounded-2xl bg-black/5 border border-black/5 flex items-center justify-center text-foreground/40">
-                                                    <LinkIcon size={24} />
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center">
+                                                    <LinkIcon size={20} />
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-xl font-bold text-foreground">Local Uplink</h3>
-                                                    <p className="text-foreground/20 text-[8px] font-bold uppercase tracking-[0.4em] mt-1.5 pl-0.5">Manual Injection</p>
+                                                    <h3 className="text-lg font-bold text-slate-900">Local Assets</h3>
+                                                    <p className="text-slate-400 text-xs">Upload PDFs, text files or images.</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-6 bg-black/[0.03] px-6 py-4 rounded-2xl border border-black/5">
-                                                <span className="text-[10px] font-black uppercase text-foreground/40 tracking-[0.2em]">Neural Vision</span>
-                                                <Switch checked={devMode} onCheckedChange={setDevMode} className="data-[state=checked]:bg-primary" />
+                                            <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-lg border border-slate-100">
+                                                <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Vision Engine</span>
+                                                <Switch checked={devMode} onCheckedChange={setDevMode} className="data-[state=checked]:bg-[#2563eb]" />
                                             </div>
                                         </div>
-                                        
-                                        <div className="bg-black/[0.03] rounded-[3rem] p-4 border border-black/5">
+
+                                        <div className="bg-slate-50 rounded-lg p-2 border-2 border-dashed border-slate-200 transition-colors hover:border-blue-200">
                                             <FileUpload
                                                 onFileSelect={handleFileSelect}
                                                 accept=".pdf,image/*"
@@ -565,70 +565,80 @@ export default function FilesPage() {
                                         </div>
 
                                         {devMode && selectedFile && selectedFile.type.startsWith("image/") && (
-                                            <div className="bg-black/[0.02] p-8 rounded-[2.5rem] border border-black/5 flex flex-col md:flex-row gap-6 justify-center animate-in zoom-in-95">
-                                               {[
-                                                   { id: "ocr", label: "Semantic Vision OCR", desc: "Raw Text Extraction" },
-                                                   { id: "transcribe", label: "Neural Transcription", desc: "Contextual Translation" }
-                                               ].map((mode) => (
-                                                   <button
+                                            <div className="bg-slate-50 p-6 rounded-lg border border-slate-100 flex flex-col md:flex-row gap-4">
+                                                {[
+                                                    { id: "ocr", label: "Optical OCR", desc: "Extract raw text" },
+                                                    { id: "transcribe", label: "Semantic Translation", desc: "Interpret context" }
+                                                ].map((mode) => (
+                                                    <button
                                                         key={mode.id}
                                                         type="button"
                                                         onClick={() => setProcessingMode(mode.id as any)}
-                                                        className={`flex-1 p-8 rounded-[1.5rem] border transition-all text-left group ${
-                                                            processingMode === mode.id 
-                                                                ? "bg-white border-primary shadow-xl shadow-primary/10 ring-1 ring-primary"
-                                                                : "bg-white/40 border-transparent hover:bg-white hover:border-black/5 shadow-sm"
-                                                        }`}
-                                                   >
+                                                        className={`flex-1 p-5 rounded-lg border transition-all text-left ${processingMode === mode.id
+                                                                ? "bg-white border-[#2563eb] shadow-sm"
+                                                                : "bg-white border-slate-200 hover:border-slate-300"
+                                                            }`}
+                                                    >
                                                         <div className="flex items-center justify-between">
-                                                            <div className="space-y-1">
-                                                                <h4 className={`text-sm font-black tracking-tight ${processingMode === mode.id ? "text-primary" : "text-foreground"}`}>{mode.label}</h4>
-                                                                <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest leading-none">{mode.desc}</p>
+                                                            <div className="space-y-0.5">
+                                                                <h4 className={`text-xs font-bold ${processingMode === mode.id ? "text-[#2563eb]" : "text-slate-900"}`}>{mode.label}</h4>
+                                                                <p className="text-[10px] font-medium text-slate-400">{mode.desc}</p>
                                                             </div>
-                                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${processingMode === mode.id ? "border-primary bg-primary scale-110" : "border-black/5 bg-white"}`}>
-                                                                {processingMode === mode.id && <div className="w-2 h-2 rounded-full bg-white shadow-sm" />}
+                                                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${processingMode === mode.id ? "border-[#2563eb] bg-[#2563eb]" : "border-slate-200"}`}>
+                                                                {processingMode === mode.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                                                             </div>
                                                         </div>
-                                                   </button>
-                                               ))}
+                                                    </button>
+                                                ))}
                                             </div>
                                         )}
 
-                                        <Button onClick={handleUpload} disabled={uploading || !selectedFile} className="w-full py-12 rounded-[2.5rem] bg-foreground text-white font-bold uppercase tracking-[0.3em] text-[12px] shadow-3xl shadow-black/20 hover:translate-y-[-2px] active:translate-y-[1px] transition-all">
-                                            {uploading ? <RefreshCcw className="animate-spin mr-6" /> : <Plus size={24} className="mr-6 " />}
-                                            {uploading ? "Analyzing Assets..." : "Confirm Protocol Uplink"}
+                                        <Button
+                                            onClick={handleUpload}
+                                            disabled={uploading || !selectedFile}
+                                            className="w-full py-6 rounded-lg bg-[#2563eb] text-white font-bold text-sm shadow-md shadow-blue-100 hover:translate-y-[-1px] transition-all"
+                                        >
+                                            {uploading ? <RefreshCcw size={16} className="animate-spin mr-2" /> : <Plus size={16} className="mr-2" />}
+                                            {uploading ? "Analyzing..." : "Analyze and Inject Local File"}
                                         </Button>
                                     </div>
 
-                                    {/* File Terminal List */}
+                                    {/* Asset Table */}
                                     {selectedGroup && selectedGroup.files.length > 0 && (
-                                        <div className="space-y-10 pt-10">
-                                            <div className="flex items-center justify-between px-6">
-                                                <h3 className="text-[9px] font-bold uppercase tracking-[0.5em] text-foreground/20 flex items-center gap-5">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-                                                    Operational Asset Ledger
+                                        <div className="pt-4 animate-in fade-in duration-500">
+                                            <div className="flex items-center justify-between mb-4 px-2">
+                                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-3">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                                    Bot Knowledge Base
                                                 </h3>
-                                                <span className="text-[9px] font-bold text-foreground/40 bg-black/5 px-6 py-2 rounded-full border border-black/5 uppercase tracking-widest">{selectedGroup.files.length} Live Artifacts</span>
+                                                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full uppercase">
+                                                    {selectedGroup.files.length} Live Documents
+                                                </span>
                                             </div>
-                                            <div className="grid grid-cols-1 gap-6">
+                                            <div className="grid grid-cols-1 gap-3">
                                                 {selectedGroup.files.map((file) => (
-                                                    <div key={file.id} className="glass-card p-10 rounded-[3rem] flex items-center justify-between group hover:bg-black/[0.01] transition-all border border-black/5">
-                                                        <div className="flex items-center gap-10">
-                                                            <div className="w-14 h-14 rounded-2xl bg-black/[0.02] flex items-center justify-center border border-black/5 group-hover:scale-105 transition-transform">
-                                                                <FileText size={22} className="text-foreground/20" />
+                                                    <div key={file.id} className="bg-white border border-slate-200 p-5 rounded-xl flex items-center justify-between hover:border-blue-200 transition-all shadow-sm">
+                                                        <div className="flex items-center gap-5">
+                                                            <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+                                                                <FileText size={18} />
                                                             </div>
-                                                            <div className="space-y-2">
-                                                                <h4 className="font-bold text-lg tracking-tight text-foreground/80">{file.name}</h4>
-                                                                <div className="flex items-center gap-6 text-[8px] uppercase font-bold tracking-[0.25em] text-foreground/20">
-                                                                    <span className="bg-black/5 text-foreground/40 px-3 py-1 rounded-lg">{file.file_type}</span>
-                                                                    <span className="flex items-center gap-2"><Database size={12}/> {file.chunk_count} Cognitive Nodes</span>
-                                                                    <span className="opacity-30">|</span>
-                                                                    <span>Active Profile</span>
+                                                            <div className="space-y-0.5">
+                                                                <h4 className="font-bold text-sm text-slate-900">{file.name}</h4>
+                                                                <div className="flex items-center gap-4 text-[10px] font-medium text-slate-400">
+                                                                    <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase">{file.file_type}</span>
+                                                                    <span className="flex items-center gap-1.5"><Database size={10} /> {file.chunk_count || 0} chunks</span>
+                                                                    <div className="w-1 h-1 rounded-full bg-slate-200 mx-1"></div>
+                                                                    <span>RAG Ready</span>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <Button variant="ghost" size="icon" onClick={() => deleteFile(file.id)} className="rounded-[1.5rem] w-16 h-16 text-red-500/20 hover:text-red-500 hover:bg-red-50 transition-all border border-transparent hover:border-red-100">
-                                                            <Trash2 size={24} />
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => deleteFile(file.id)}
+                                                            className="text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all rounded-lg"
+                                                        >
+                                                            <Trash2 size={16} />
                                                         </Button>
                                                     </div>
                                                 ))}
@@ -636,21 +646,24 @@ export default function FilesPage() {
                                         </div>
                                     )}
                                 </TabsContent>
-                             </Tabs>
+                            </Tabs>
                         </div>
                     ) : (
-                        <div className="flex flex-col items-center justify-center h-[72vh] text-center space-y-10 animate-in fade-in zoom-in-[0.98] duration-1000">
-                            <div className="w-28 h-28 rounded-[3rem] bg-white border border-black/5 flex items-center justify-center shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)] group">
-                                <Smartphone size={40} className="text-foreground/20 group-hover:scale-110 transition-transform duration-500" />
+                        <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6 animate-in fade-in duration-500">
+                            <div className="w-20 h-20 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                                <Bot size={32} className="text-slate-300" />
                             </div>
-                            <div className="space-y-4">
-                                <h3 className="text-5xl font-black tracking-tighter text-foreground">Operational Standby</h3>
-                                <p className="text-foreground/30 max-w-sm mx-auto font-medium text-lg leading-relaxed">
-                                    Select a node from the management deck or initialize a new terminal to begin knowledge injection.
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-bold text-slate-900">Bot Console Standby</h3>
+                                <p className="text-slate-400 max-w-sm mx-auto font-medium text-sm">
+                                    Select a bot configuration from the sidebar or click "Add New Bot" to get started.
                                 </p>
                             </div>
-                            <Button onClick={handleNewPhone} className="rounded-full bg-foreground text-white px-14 py-8 font-bold uppercase tracking-[0.3em] text-[10px] shadow-2xl shadow-black/20 hover:translate-y-[-2px] transition-all">
-                                Initialize Management Deck
+                            <Button
+                                onClick={handleNewPhone}
+                                className="rounded-lg bg-[#2563eb] text-white px-8 py-6 font-bold uppercase tracking-wider text-[10px] shadow-md shadow-blue-100 hover:translate-y-[-1px] transition-all"
+                            >
+                                Create New AI Profile
                             </Button>
                         </div>
                     )}

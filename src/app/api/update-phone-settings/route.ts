@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
+import { getUserFromRequest } from "@/lib/authServer";
 
 export async function POST(req: NextRequest) {
     try {
+        const user = await getUserFromRequest(req);
+
         const body = await req.json();
         const { phone_number, intent, system_prompt, auth_token, origin, gemini_api_key, groq_api_key, mistral_api_key } = body;
 
@@ -16,10 +19,16 @@ export async function POST(req: NextRequest) {
         console.log("Updating phone settings for:", phone_number);
 
         // Check if phone number has any mappings
-        const { data: existingMappings } = await supabase
+        let existingMappingsQuery = supabase
             .from("phone_document_mapping")
             .select("*")
             .eq("phone_number", phone_number);
+
+        if (user) {
+            existingMappingsQuery = existingMappingsQuery.eq("user_id", user.id);
+        }
+
+        const { data: existingMappings } = await existingMappingsQuery;
 
         if (!existingMappings || existingMappings.length === 0) {
             return NextResponse.json(
@@ -29,7 +38,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Update all mappings for this phone number
-        const updateData: any = {};
+        const updateData: Record<string, string | null> = {};
         if (intent !== undefined) updateData.intent = intent;
         if (system_prompt !== undefined) updateData.system_prompt = system_prompt;
         if (auth_token !== undefined) updateData.auth_token = auth_token;
@@ -38,10 +47,16 @@ export async function POST(req: NextRequest) {
         if (groq_api_key !== undefined) updateData.groq_api_key = groq_api_key;
         if (mistral_api_key !== undefined) updateData.mistral_api_key = mistral_api_key;
 
-        const { error: updateMappingError } = await supabase
+        let updateMappingsQuery = supabase
             .from("phone_document_mapping")
             .update(updateData)
             .eq("phone_number", phone_number);
+
+        if (user) {
+            updateMappingsQuery = updateMappingsQuery.eq("user_id", user.id);
+        }
+
+        const { error: updateMappingError } = await updateMappingsQuery;
 
         if (updateMappingError) {
             console.error("Error updating phone_document_mapping:", updateMappingError);
@@ -55,14 +70,20 @@ export async function POST(req: NextRequest) {
                 .filter(id => id !== null);
 
             if (fileIds.length > 0) {
-                const updateFileData: any = {};
+                const updateFileData: Record<string, string | null> = {};
                 if (auth_token !== undefined) updateFileData.auth_token = auth_token;
                 if (origin !== undefined) updateFileData.origin = origin;
 
-                const { error: updateFileError } = await supabase
+                let updateFilesQuery = supabase
                     .from("rag_files")
                     .update(updateFileData)
                     .in("id", fileIds);
+
+                if (user) {
+                    updateFilesQuery = updateFilesQuery.eq("user_id", user.id);
+                }
+
+                const { error: updateFileError } = await updateFilesQuery;
 
                 if (updateFileError) {
                     console.error("Error updating rag_files:", updateFileError);

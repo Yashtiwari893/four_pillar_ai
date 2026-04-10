@@ -1,118 +1,131 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { FileUp, MessageSquare } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { 
-  MessageSquare, 
-  Database, 
-  RefreshCcw, 
-  Smartphone, 
-  ArrowRight,
-  Sparkles,
-  Zap
-} from "lucide-react";
+import { AppShell } from "@/components/layout/app-shell";
+import { authedFetch } from "@/lib/authedFetch";
 
-export default function HomePage() {
+type Metrics = {
+    total_files: number;
+    total_chunks: number;
+    active_bots: number;
+    web_chat_messages: number;
+    whatsapp_messages: number;
+};
+
+export default function DashboardPage() {
+    const [metrics, setMetrics] = useState<Metrics>({
+        total_files: 0,
+        total_chunks: 0,
+        active_bots: 0,
+        web_chat_messages: 0,
+        whatsapp_messages: 0,
+    });
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        async function loadMetrics() {
+            try {
+                const res = await authedFetch("/api/analytics/overview");
+                const data = await res.json();
+                if (res.ok && data.metrics) {
+                    setMetrics(data.metrics);
+                }
+            } catch (error) {
+                console.error("Failed to load dashboard metrics", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        void loadMetrics();
+    }, []);
+
+    const cards = [
+        { label: "Active Bots", value: metrics.active_bots, helper: "Configured phone profiles" },
+        { label: "Data Sources", value: metrics.total_files, helper: "Files connected to RAG" },
+        { label: "Knowledge Chunks", value: metrics.total_chunks, helper: "Embeddings indexed" },
+        {
+            label: "Total Conversations",
+            value: metrics.web_chat_messages + metrics.whatsapp_messages,
+            helper: "Web + WhatsApp messages",
+        },
+    ];
+
     return (
-        <main className="relative flex flex-col items-center justify-center min-h-screen px-6 py-20 overflow-hidden">
-            {/* Header / Nav */}
-            <nav className="fixed top-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-6 py-3 glass rounded-full z-50">
-                <div className="flex items-center gap-2 pr-4 border-r border-white/10">
-                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                        <Zap size={18} className="text-white fill-white" />
-                    </div>
-                    <span className="font-bold text-lg tracking-tight">AuraChat</span>
-                </div>
-                <Link href="/chat" className="text-sm font-medium hover:text-primary transition-colors">Chat</Link>
-                <Link href="/files" className="text-sm font-medium hover:text-primary transition-colors">Docs</Link>
-                <Link href="/files" className="text-sm font-medium hover:text-primary transition-colors">Numbers</Link>
-            </nav>
-
-            {/* Hero Section */}
-            <div className="max-w-4xl w-full text-center space-y-8 mb-20 pt-10">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary animate-bounce text-sm font-medium">
-                    <Sparkles size={14} />
-                    The Future of WhatsApp RAG
-                </div>
-                
-                <h1 className="text-6xl md:text-8xl font-black text-gradient leading-tight tracking-tighter">
-                    Elevate Your <br /> WhatsApp Game.
-                </h1>
-                
-                <p className="text-xl md:text-2xl text-muted-foreground/80 max-w-2xl mx-auto font-medium">
-                    Deploy hyper-intelligent, data-driven AI bots that respond like humans. No generic chat, just pure intent.
-                </p>
-
-                <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                    <Link href="/chat">
-                        <Button size="lg" className="rounded-full px-8 py-7 text-lg bg-primary hover:bg-primary/90 neon-glow transition-all active:scale-95 group">
-                            Get Started
-                            <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-                        </Button>
-                    </Link>
-                    <Link href="/files">
-                        <Button size="lg" variant="outline" className="rounded-full px-8 py-7 text-lg border-white/10 glass hover:bg-white/5 bg-transparent transition-all">
-                            Training Center
-                        </Button>
-                    </Link>
-                </div>
-            </div>
-
-            {/* Feature Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl w-full">
-                <FeatureCard
-                    icon={<Smartphone className="text-primary" />}
-                    title="Phone Numbers"
-                    desc="Manage multiple WhatsApp nodes effortlessly."
-                    href="/files"
-                />
-                <FeatureCard
-                    icon={<Database className="text-secondary" />}
-                    title="Knowledge Base"
-                    desc="Inject PDFs & Docs directly into AI memory."
-                    href="/files"
-                />
-                <FeatureCard
-                    icon={<RefreshCcw className="text-accent" />}
-                    title="Sync Lab"
-                    desc="Zero-latency Google Sheet data streaming."
-                    href="/files"
-                />
-                <FeatureCard
-                    icon={<MessageSquare className="text-primary" />}
-                    title="Live Monitor"
-                    desc="Watch your AI agents interact in real-time."
-                    href="/chat"
-                />
-            </div>
-
-            {/* Status Footer */}
-            <footer className="mt-24 px-8 py-4 glass rounded-2xl flex items-center gap-4 text-sm font-medium text-muted-foreground">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                System Status: All Engines Operational
-                <span className="opacity-30">|</span>
-                <span>NextGen Automation © 2026</span>
-            </footer>
-        </main>
-    );
-}
-
-function FeatureCard({ icon, title, desc, href }: { icon: React.ReactNode, title: string, desc: string, href: string }) {
-    return (
-        <Link href={href} className="group">
-            <Card className="h-full glass border-white/5 bg-white/[0.02] hover:bg-white/[0.08] transition-all transform hover:-translate-y-2 hover:shadow-2xl overflow-hidden relative">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-3xl -mr-8 -mt-8 group-hover:bg-primary/20 transition-all" />
-                <CardContent className="p-8 space-y-4">
-                    <div className="w-12 h-12 rounded-2xl bg-black/40 flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform">
-                        {icon}
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-bold tracking-tight mb-2">{title}</h3>
-                        <p className="text-muted-foreground leading-relaxed transition-colors group-hover:text-foreground">
-                            {desc}
+        <AppShell
+            title="11za RAG AI Dashboard"
+            subtitle="Track your data pipeline and move from upload to insights in one connected workspace."
+            headerActions={
+                <>
+                    <Button asChild variant="outline">
+                        <Link href="/files">
+                            <FileUp size={16} />
+                            Upload Data
+                        </Link>
+                    </Button>
+                    <Button asChild>
+                        <Link href="/chat">
+                            <MessageSquare size={16} />
+                            Open Chat
+                        </Link>
+                    </Button>
+                </>
+            }
+        >
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {cards.map((card) => (
+                    <article
+                        key={card.label}
+                        className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                    >
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{card.label}</p>
+                        <p className="mt-3 text-3xl font-semibold tracking-tight">
+                            {isLoading ? "..." : card.value.toLocaleString()}
                         </p>
+                        <p className="mt-2 text-xs text-slate-500">{card.helper}</p>
+                    </article>
+                ))}
+            </section>
+
+            <section className="mt-6 grid gap-4 lg:grid-cols-3">
+                <article className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm lg:col-span-2">
+                    <h2 className="text-base font-semibold">Connected Workflow</h2>
+                    <p className="mt-1 text-sm text-slate-500">Follow this path for fastest onboarding and best answer quality.</p>
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <Link href="/files" className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:bg-white">
+                            <p className="text-xs font-semibold uppercase text-slate-500">Step 1</p>
+                            <p className="mt-2 text-sm font-semibold">Upload data sources</p>
+                        </Link>
+                        <Link href="/files" className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:bg-white">
+                            <p className="text-xs font-semibold uppercase text-slate-500">Step 2</p>
+                            <p className="mt-2 text-sm font-semibold">Configure bot intent</p>
+                        </Link>
+                        <Link href="/chat" className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:bg-white">
+                            <p className="text-xs font-semibold uppercase text-slate-500">Step 3</p>
+                            <p className="mt-2 text-sm font-semibold">Test in chat console</p>
+                        </Link>
                     </div>
-                </CardContent>
-            </Card>
-        </Link>
+                </article>
+
+                <article className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                    <h2 className="text-base font-semibold">Usage Snapshot</h2>
+                    <p className="mt-1 text-sm text-slate-500">Live totals from web and WhatsApp channels.</p>
+                    <div className="mt-5 space-y-3 text-sm">
+                        <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                            <span className="text-slate-500">Web chat messages</span>
+                            <span className="font-semibold">{isLoading ? "..." : metrics.web_chat_messages}</span>
+                        </div>
+                        <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                            <span className="text-slate-500">WhatsApp messages</span>
+                            <span className="font-semibold">{isLoading ? "..." : metrics.whatsapp_messages}</span>
+                        </div>
+                    </div>
+                </article>
+            </section>
+        </AppShell>
     );
 }

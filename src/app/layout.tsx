@@ -1,20 +1,21 @@
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import type { Metadata } from "next";
 
-const inter = Inter({
-  variable: "--font-inter",
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
   subsets: ["latin"],
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-plex-mono",
+  weight: ["400", "500"],
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "AuraChat | Ultimate WhatsApp RAG",
-  description: "Next-gen AI automation for WhatsApp",
+  title: "11za RAG AI | Production RAG Workspace",
+  description: "Production-grade RAG automation for chat and WhatsApp workflows",
 };
 
 export default function RootLayout({
@@ -25,7 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased bg-[#f8fafc] text-[#0f172a] min-h-screen relative overflow-x-hidden`}
+        className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} font-sans antialiased bg-[#f8fafc] text-[#0f172a] min-h-screen relative overflow-x-hidden`}
       >
         <div className="fixed inset-0 bg-grid z-[-1] opacity-5 pointer-events-none" />
         {children}

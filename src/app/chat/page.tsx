@@ -1,23 +1,15 @@
 "use client";
 
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { v4 as uuid } from "uuid";
+import { Bot, Send, Sparkles, User } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { v4 as uuid } from "uuid";
-import ReactMarkdown from "react-markdown";
-import { 
-  Send, 
-  Plus, 
-  FileText, 
-  ChevronRight, 
-  Sparkles, 
-  User, 
-  Bot,
-  Zap,
-  LayoutDashboard
-} from "lucide-react";
-import Link from "next/link";
+import { AppShell } from "@/components/layout/app-shell";
+import { authedFetch } from "@/lib/authedFetch";
 
 type ChatMessage = {
     role: "user" | "assistant";
@@ -29,83 +21,119 @@ type FileItem = {
     name: string;
 };
 
+type ChatSession = {
+    id: string;
+    title: string;
+    updatedAt: string;
+    fileId?: string;
+};
+
+const CHAT_SESSIONS_KEY = "chat_sessions";
+
 export default function ChatPage() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
     const [isThinking, setIsThinking] = useState(false);
-    const bottomRef = useRef<HTMLDivElement | null>(null);
-
     const [files, setFiles] = useState<FileItem[]>([]);
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
+    const [sessions, setSessions] = useState<ChatSession[]>([]);
+
+    const bottomRef = useRef<HTMLDivElement | null>(null);
+
+    function persistSessions(next: ChatSession[]) {
+        const compact = next.slice(0, 20);
+        setSessions(compact);
+        localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(compact));
+    }
+
+    function createSession(fileId?: string | null) {
+        const id = uuid();
+        const nextSession: ChatSession = {
+            id,
+            title: "New conversation",
+            updatedAt: new Date().toISOString(),
+            fileId: fileId || undefined,
+        };
+
+        const existingRaw = localStorage.getItem(CHAT_SESSIONS_KEY);
+        const existing = existingRaw ? (JSON.parse(existingRaw) as ChatSession[]) : [];
+        persistSessions([nextSession, ...existing.filter((s) => s.id !== id)]);
+        localStorage.setItem("chat_session_id", id);
+        setSessionId(id);
+        setMessages([]);
+    }
+
+    useEffect(() => {
+        const stored = localStorage.getItem(CHAT_SESSIONS_KEY);
+        const parsed = stored ? (JSON.parse(stored) as ChatSession[]) : [];
+        setSessions(parsed);
+
+        const storedSessionId = localStorage.getItem("chat_session_id");
+        if (storedSessionId) {
+            setSessionId(storedSessionId);
+            return;
+        }
+
+        const id = uuid();
+        const nextSession: ChatSession = {
+            id,
+            title: "New conversation",
+            updatedAt: new Date().toISOString(),
+        };
+        const nextSessions = [nextSession, ...parsed.filter((s) => s.id !== id)].slice(0, 20);
+        setSessions(nextSessions);
+        localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(nextSessions));
+        localStorage.setItem("chat_session_id", id);
+        setSessionId(id);
+    }, []);
 
     useEffect(() => {
         async function loadFiles() {
-            const res = await fetch("/api/files");
-            if (!res.ok) {
-                console.error("Failed to load files");
-                return;
-            }
-            const data = await res.json();
-            const fetchedFiles: FileItem[] = data.files || [];
-            setFiles(fetchedFiles);
-
-            const hadSelection = Boolean(selectedFile);
-            let nextSelection = selectedFile;
-
-            if (
-                nextSelection &&
-                !fetchedFiles.some((f) => f.id === nextSelection)
-            ) {
-                nextSelection = null;
-            }
-
-            if (!hadSelection && !nextSelection && fetchedFiles.length > 0) {
-                nextSelection = fetchedFiles[0].id;
-            }
-
-            if (nextSelection !== selectedFile) {
-                setSelectedFile(nextSelection);
-                if (hadSelection) {
-                    resetChat();
+            try {
+                const res = await authedFetch("/api/files");
+                if (!res.ok) {
+                    return;
                 }
+                const data = await res.json();
+                const fetchedFiles: FileItem[] = data.files || [];
+                setFiles(fetchedFiles);
+
+                if (fetchedFiles.length > 0) {
+                    const activeSession = sessions.find((s) => s.id === sessionId);
+                    const preferredFile = activeSession?.fileId;
+                    const exists = preferredFile && fetchedFiles.some((f) => f.id === preferredFile);
+                    setSelectedFile(exists ? preferredFile! : fetchedFiles[0].id);
+                }
+            } catch (error) {
+                console.error("Failed to load files", error);
             }
         }
 
-        loadFiles();
-    }, [selectedFile]);
-
+        void loadFiles();
+    }, [sessionId, sessions]);
 
     useEffect(() => {
-        let id = localStorage.getItem("chat_session_id");
-        if (!id) {
-            id = uuid();
-            localStorage.setItem("chat_session_id", id);
-        }
-        setSessionId(id);
-    }, []);
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages, isThinking]);
 
     useEffect(() => {
         if (!sessionId) return;
 
         async function loadHistory() {
             try {
-                const res = await fetch(`/api/get-messages?session_id=${sessionId}`);
+                const res = await authedFetch(`/api/get-messages?session_id=${sessionId}`);
                 if (!res.ok) return;
                 const data = await res.json();
                 setMessages(data.messages || []);
-            } catch (err) {
-                console.error("loadHistory error", err);
+            } catch (error) {
+                console.error("Failed to load chat history", error);
             }
         }
 
-        loadHistory();
+        void loadHistory();
     }, [sessionId]);
-
-    useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages, isThinking]);
 
     async function sendMessage() {
         if (!input.trim() || !sessionId || isSending || !selectedFile) return;
@@ -113,12 +141,24 @@ export default function ChatPage() {
         const content = input.trim();
         const userMessage: ChatMessage = { role: "user", content };
 
-        setIsSending(true);
+        persistSessions(
+            [
+                {
+                    id: sessionId,
+                    title: content.slice(0, 56),
+                    updatedAt: new Date().toISOString(),
+                    fileId: selectedFile,
+                },
+                ...sessions.filter((s) => s.id !== sessionId),
+            ]
+        );
+
         setInput("");
-        setMessages((prev) => [...prev, userMessage]);
+        setIsSending(true);
+        setMessages((prev) => [...prev, userMessage, { role: "assistant", content: "" }]);
 
         try {
-            await fetch("/api/save-message", {
+            await authedFetch("/api/save-message", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -130,7 +170,7 @@ export default function ChatPage() {
 
             setIsThinking(true);
 
-            const res = await fetch("/api/chat", {
+            const res = await authedFetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -140,15 +180,18 @@ export default function ChatPage() {
                 }),
             });
 
+            setIsThinking(false);
+
             if (!res.ok) {
-                setIsThinking(false);
-                setMessages((prev) => [...prev, { role: "assistant", content: "Error communicating with AI lab." }]);
+                const payload = await res.json().catch(() => ({}));
+                const message = payload?.error || "Could not get AI response.";
+                setMessages((prev) => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = { role: "assistant", content: message };
+                    return updated;
+                });
                 return;
             }
-
-            setIsThinking(false);
-            const aiMessageIndex = messages.length + 1;
-            setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
             const reader = res.body?.getReader();
             const decoder = new TextDecoder();
@@ -164,16 +207,13 @@ export default function ChatPage() {
 
                     setMessages((prev) => {
                         const updated = [...prev];
-                        updated[aiMessageIndex] = {
-                            role: "assistant",
-                            content: fullReply,
-                        };
+                        updated[updated.length - 1] = { role: "assistant", content: fullReply };
                         return updated;
                     });
                 }
             }
 
-            await fetch("/api/save-message", {
+            await authedFetch("/api/save-message", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -182,8 +222,16 @@ export default function ChatPage() {
                     content: fullReply,
                 }),
             });
-        } catch (err) {
-            console.error(err);
+        } catch (error) {
+            console.error(error);
+            setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: "Something went wrong while sending your message.",
+                };
+                return updated;
+            });
             setIsThinking(false);
         } finally {
             setIsSending(false);
@@ -193,177 +241,179 @@ export default function ChatPage() {
     function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            sendMessage();
+            void sendMessage();
         }
     }
 
     function resetChat() {
-        const newSessionId = uuid();
-        localStorage.setItem("chat_session_id", newSessionId);
-        setSessionId(newSessionId);
-        setMessages([]);
+        createSession(selectedFile);
+    }
+
+    function switchSession(targetSessionId: string) {
+        setSessionId(targetSessionId);
+        localStorage.setItem("chat_session_id", targetSessionId);
+
+        const selectedSession = sessions.find((s) => s.id === targetSessionId);
+        if (selectedSession?.fileId) {
+            setSelectedFile(selectedSession.fileId);
+        }
     }
 
     return (
-        <div className="flex h-screen bg-background overflow-hidden relative">
-            {/* Sidebar */}
-            <aside className="w-80 glass border-r border-white/5 flex flex-col hidden md:flex z-20">
-                <div className="p-6 flex items-center gap-2 border-b border-white/5">
-                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center animate-pulse">
-                        <Zap size={16} className="text-white fill-white" />
-                    </div>
-                    <Link href="/" className="font-bold text-xl tracking-tight">AuraChat</Link>
-                </div>
-
-                <div className="p-4 flex-1 space-y-6">
-                    <div>
-                        <Button onClick={resetChat} className="w-full justify-start gap-2 bg-white/5 hover:bg-white/10 text-white border-white/10 rounded-xl py-6" variant="outline">
-                            <Plus size={18} />
-                            New Chat
-                        </Button>
-                    </div>
-
-                    <div className="space-y-3">
-                        <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-2">Knowledge Base</label>
-                        <div className="space-y-1">
+        <AppShell
+            title="Chat Console"
+            subtitle="Ask questions against your selected knowledge source and iterate quickly."
+            contentClassName="p-0 flex overflow-hidden pb-20 md:pb-0"
+            headerActions={<Button variant="outline" onClick={resetChat}>New Chat</Button>}
+            sidebarExtras={
+                <>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-semibold text-slate-700">Knowledge Source</p>
+                        <p className="mt-1 text-xs text-slate-500">Choose which file this chat should reference.</p>
+                        <div className="mt-3 space-y-2">
                             {files.length === 0 ? (
-                                <p className="text-sm text-muted-foreground px-2 italic">No docs uploaded yet.</p>
+                                <p className="rounded-lg border border-dashed border-slate-200 p-3 text-xs text-slate-500">
+                                    No files found. Add documents in Data Sources.
+                                </p>
                             ) : (
-                                files.map((f) => (
+                                files.map((file) => (
                                     <button
-                                        key={f.id}
-                                        onClick={() => setSelectedFile(f.id)}
-                                        className={`w-full text-left px-3 py-3 rounded-xl flex items-center gap-3 transition-all ${
-                                            selectedFile === f.id 
-                                            ? "bg-primary/20 text-primary border border-primary/20" 
-                                            : "hover:bg-white/5 text-muted-foreground"
+                                        key={file.id}
+                                        onClick={() => {
+                                            setSelectedFile(file.id);
+                                            resetChat();
+                                        }}
+                                        className={`w-full rounded-lg border px-3 py-2 text-left text-xs ${
+                                            selectedFile === file.id
+                                                ? "border-slate-900 bg-slate-900 text-white"
+                                                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                                         }`}
                                     >
-                                        <FileText size={16} />
-                                        <span className="text-sm font-medium truncate">{f.name}</span>
-                                        {selectedFile === f.id && <ChevronRight size={14} className="ml-auto" />}
+                                        {file.name}
                                     </button>
                                 ))
                             )}
                         </div>
                     </div>
-                </div>
 
-                <div className="p-4 mt-auto">
-                   <Link href="/">
-                    <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5 rounded-xl">
-                        <LayoutDashboard size={18} />
-                        Back to Hub
-                    </Button>
-                   </Link>
-                </div>
-            </aside>
-
-            {/* Chat Area */}
-            <main className="flex-1 flex flex-col relative z-10">
-                {/* Minimal Top Header */}
-                <header className="h-16 md:h-20 glass md:bg-transparent border-b md:border-b-0 border-white/5 flex items-center justify-between px-6">
-                    <div className="flex items-center gap-3">
-                        <div className="md:hidden w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                            <Zap size={16} className="text-white fill-white" />
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-semibold text-slate-700">Chat History</p>
+                        <p className="mt-1 text-xs text-slate-500">Recent sessions on this device.</p>
+                        <div className="mt-3 space-y-2">
+                            {sessions.length === 0 ? (
+                                <p className="rounded-lg border border-dashed border-slate-200 p-3 text-xs text-slate-500">
+                                    No previous sessions.
+                                </p>
+                            ) : (
+                                sessions.map((session) => (
+                                    <button
+                                        key={session.id}
+                                        onClick={() => switchSession(session.id)}
+                                        className={`w-full rounded-lg border px-3 py-2 text-left text-xs ${
+                                            sessionId === session.id
+                                                ? "border-slate-900 bg-slate-900 text-white"
+                                                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                        }`}
+                                    >
+                                        <p className="truncate font-medium">{session.title}</p>
+                                    </button>
+                                ))
+                            )}
                         </div>
-                        <h2 className="text-lg font-bold tracking-tight">AI Agent <span className="text-primary">• Active</span></h2>
                     </div>
-                </header>
-
-                {/* Messages Container */}
-                <ScrollArea className="flex-1 p-4 md:p-8">
-                    <div className="max-w-3xl mx-auto space-y-8 pb-32">
+                </>
+            }
+        >
+            <div className="flex flex-1 flex-col">
+                <ScrollArea className="flex-1 px-4 py-6 md:px-8">
+                    <div className="mx-auto flex max-w-4xl flex-col gap-6 pb-32">
                         {messages.length === 0 && !isThinking && (
-                            <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6">
-                                <div className="w-20 h-20 rounded-[2.5rem] bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-                                    <Sparkles size={32} className="text-indigo-400" />
+                            <div className="mt-10 rounded-3xl border border-slate-200/70 bg-white/80 p-10 text-center">
+                                <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-slate-900 text-white">
+                                    <Sparkles size={24} />
                                 </div>
-                                <div>
-                                    <h3 className="text-2xl font-black mb-2">Sup, how can I help?</h3>
-                                    <p className="text-muted-foreground">Select a file from the sidebar and let&apos;s dive into the data.</p>
-                                </div>
+                                <h2 className="text-xl font-semibold">Ask anything about your selected source</h2>
+                                <p className="mt-2 text-sm text-slate-500">
+                                    Upload data in Data Sources, then ask focused questions here.
+                                </p>
                             </div>
                         )}
 
                         {messages.map((msg, index) => (
-                            <div 
-                                key={index} 
-                                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} items-end gap-3 group animate-in fade-in slide-in-from-bottom-4 duration-300`}
+                            <div
+                                key={index}
+                                className={`flex items-start gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                             >
                                 {msg.role === "assistant" && (
-                                    <div className="w-8 h-8 rounded-full glass border-white/10 flex items-center justify-center flex-shrink-0 mb-1">
-                                        <Bot size={14} className="text-primary" />
+                                    <div className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-white">
+                                        <Bot size={14} />
                                     </div>
                                 )}
-                                <div 
-                                    className={`relative max-w-[85%] md:max-w-[75%] px-5 py-3 rounded-[1.5rem] shadow-sm ${
-                                        msg.role === "user" 
-                                        ? "bg-primary text-white rounded-br-sm neon-glow" 
-                                        : "glass border-white/10 rounded-bl-sm"
+
+                                <div
+                                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed md:max-w-[70%] ${
+                                        msg.role === "user"
+                                            ? "bg-slate-900 text-white"
+                                            : "border border-slate-200 bg-white text-slate-800"
                                     }`}
                                 >
-                                    <div className={`prose prose-sm dark:prose-invert max-w-none ${msg.role === "user" ? "text-white prose-p:text-white" : ""}`}>
-                                        {msg.role === "assistant" ? (
+                                    {msg.role === "assistant" ? (
+                                        <div className="prose prose-sm max-w-none">
                                             <ReactMarkdown>{msg.content}</ReactMarkdown>
-                                        ) : (
-                                            <p className="whitespace-pre-wrap">{msg.content}</p>
-                                        )}
-                                    </div>
+                                        </div>
+                                    ) : (
+                                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                                    )}
                                 </div>
+
                                 {msg.role === "user" && (
-                                    <div className="w-8 h-8 rounded-full glass border-white/10 flex items-center justify-center flex-shrink-0 mb-1">
-                                        <User size={14} className="text-secondary" />
+                                    <div className="grid h-8 w-8 place-items-center rounded-full bg-slate-200 text-slate-700">
+                                        <User size={14} />
                                     </div>
                                 )}
                             </div>
                         ))}
 
                         {isThinking && (
-                            <div className="flex justify-start items-center gap-3 animate-in fade-in duration-300">
-                                <div className="w-8 h-8 rounded-full glass border-white/10 flex items-center justify-center">
-                                    <Bot size={14} className="text-primary" />
+                            <div className="flex items-center gap-3">
+                                <div className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-white">
+                                    <Bot size={14} />
                                 </div>
-                                <div className="glass border-white/10 px-5 py-4 rounded-[1.5rem] rounded-bl-sm">
+                                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                                     <div className="flex gap-1.5">
-                                        <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                        <span className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                        <span className="w-2 h-2 bg-primary rounded-full animate-bounce"></span>
+                                        <span className="h-2 w-2 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.2s]" />
+                                        <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.1s]" />
+                                        <span className="h-2 w-2 animate-bounce rounded-full bg-slate-500" />
                                     </div>
                                 </div>
                             </div>
                         )}
+
                         <div ref={bottomRef} />
                     </div>
                 </ScrollArea>
 
-                {/* Floating Input Pill */}
-                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-2xl px-6">
-                    <div className="glass p-2 rounded-[2rem] border-white/10 shadow-2xl flex items-center gap-2 group hover:border-primary/30 transition-all focus-within:border-primary/50">
+                <div className="border-t border-slate-200/70 bg-white/80 px-4 py-4 backdrop-blur md:px-8">
+                    <div className="mx-auto flex max-w-4xl items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
                         <Input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="Message Aura AI..."
-                            disabled={!selectedFile}
-                            className="flex-1 bg-transparent border-none focus-visible:ring-0 text-lg px-4 py-6"
+                            placeholder={selectedFile ? "Ask a question about your data..." : "Select a file to start"}
+                            disabled={!selectedFile || isSending}
+                            className="h-11 border-0 bg-transparent text-sm shadow-none focus-visible:ring-0"
                         />
                         <Button
-                            onClick={sendMessage}
-                            disabled={isSending || !input.trim() || !selectedFile}
+                            onClick={() => void sendMessage()}
+                            disabled={!selectedFile || !input.trim() || isSending}
                             size="icon"
-                            className="bg-primary hover:bg-primary/90 text-white rounded-full w-12 h-12 flex-shrink-0"
+                            className="h-11 w-11 rounded-xl"
                         >
-                            <Send size={18} />
+                            <Send size={17} />
                         </Button>
                     </div>
-                    {!selectedFile && (
-                        <p className="mt-3 text-center text-xs font-bold text-primary/80 tracking-widest uppercase animate-pulse">
-                            Pick a file to start decoding
-                        </p>
-                    )}
                 </div>
-            </main>
-        </div>
+            </div>
+        </AppShell>
     );
 }

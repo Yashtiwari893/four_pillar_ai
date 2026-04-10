@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
+import { getUserFromRequest } from "@/lib/authServer";
 
 // GET: Retrieve phone-document mappings
 export async function GET(req: Request) {
     try {
+        const user = await getUserFromRequest(req);
+
         const { searchParams } = new URL(req.url);
         const phoneNumber = searchParams.get("phone_number");
         const fileId = searchParams.get("file_id");
@@ -12,6 +15,10 @@ export async function GET(req: Request) {
             .from("phone_document_view")
             .select("*")
             .order("created_at", { ascending: false });
+
+        if (user) {
+            query = query.eq("user_id", user.id);
+        }
 
         if (phoneNumber) {
             query = query.eq("phone_number", phoneNumber);
@@ -42,6 +49,8 @@ export async function GET(req: Request) {
 // POST: Create new phone-document mapping
 export async function POST(req: Request) {
     try {
+        const user = await getUserFromRequest(req);
+
         const body = await req.json();
         const { phone_number, file_id } = body;
 
@@ -54,7 +63,7 @@ export async function POST(req: Request) {
 
         const { data, error } = await supabase
             .from("phone_document_mapping")
-            .insert([{ phone_number, file_id }])
+            .insert([{ phone_number, file_id, ...(user ? { user_id: user.id } : {}) }])
             .select();
 
         if (error) {
@@ -82,20 +91,36 @@ export async function POST(req: Request) {
 // DELETE: Remove phone-document mapping
 export async function DELETE(req: Request) {
     try {
+        const user = await getUserFromRequest(req);
+
         const { searchParams } = new URL(req.url);
         const id = searchParams.get("id");
+        const phoneNumber = searchParams.get("phone_number");
 
-        if (!id) {
+        if (!id && !phoneNumber) {
             return NextResponse.json(
-                { error: "Mapping id is required" },
+                { error: "Mapping id or phone_number is required" },
                 { status: 400 }
             );
         }
 
-        const { error } = await supabase
+        let query = supabase
             .from("phone_document_mapping")
-            .delete()
-            .eq("id", id);
+            .delete();
+
+        if (user) {
+            query = query.eq("user_id", user.id);
+        }
+
+        if (id) {
+            query = query.eq("id", id);
+        }
+
+        if (phoneNumber) {
+            query = query.eq("phone_number", phoneNumber);
+        }
+
+        const { error } = await query;
 
         if (error) {
             throw error;

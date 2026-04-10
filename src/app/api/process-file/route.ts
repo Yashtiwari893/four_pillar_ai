@@ -1,18 +1,39 @@
 import { NextResponse } from "next/server";
 import { extractPdfText } from "@/lib/pdf";
 import { chunkText } from "@/lib/chunk";
-import { embedText, embedBatch } from "@/lib/embeddings";
+import { embedBatch } from "@/lib/embeddings";
 import { supabase } from "@/lib/supabaseClient";
 import { Mistral } from '@mistralai/mistralai';
+import { getUserFromRequest } from "@/lib/authServer";
 
 export const runtime = "nodejs";
 
 const mistralApiKey = process.env.MISTRAL_API_KEY;
 
+type OcrLine = { text?: string };
+type OcrParagraph = { text?: string };
+type OcrPage = {
+    markdown?: string;
+    lines?: OcrLine[];
+    paragraphs?: OcrParagraph[];
+};
+type OcrBlock = { text?: string };
+type OcrApiResponse = {
+    text?: string;
+    pages?: OcrPage[];
+    blocks?: OcrBlock[];
+};
+
+type PixtralResponse = {
+    choices?: Array<{ message?: { content?: string } }>;
+};
+
 export async function POST(req: Request) {
     let fileId: string | null = null;
 
     try {
+        const user = await getUserFromRequest(req);
+
         const form = await req.formData();
         const file = form.get("file") as File | null;
         const phoneNumber = form.get("phone_number") as string | null;
@@ -33,6 +54,10 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
         }
 
+        if (file.size > 50 * 1024 * 1024) {
+            return NextResponse.json({ error: "File exceeds 50MB upload limit" }, { status: 400 });
+        }
+
         if (!phoneNumber) {
             return NextResponse.json({ error: "Phone number is required" }, { status: 400 });
         }
@@ -47,7 +72,7 @@ export async function POST(req: Request) {
         const fileName = file.name;
         const fileType = file.type;
 
-        // Determine file type (PDF or Image)
+        // Determine file type (PDF, Image, CSV, TXT)
         let extractedText = "";
         let detectedFileType = "pdf";
 
@@ -81,22 +106,22 @@ export async function POST(req: Request) {
                     includeImageBase64: true
                 });
 
-                const respAny = ocrResponse as any;
+                const parsedResponse = ocrResponse as unknown as OcrApiResponse;
 
-                if (typeof respAny.text === "string" && respAny.text.length > 0) {
-                    extractedText = respAny.text;
-                } else if (Array.isArray(respAny.pages)) {
-                    extractedText = respAny.pages
-                        .map((p: any) => {
+                if (typeof parsedResponse.text === "string" && parsedResponse.text.length > 0) {
+                    extractedText = parsedResponse.text;
+                } else if (Array.isArray(parsedResponse.pages)) {
+                    extractedText = parsedResponse.pages
+                        .map((p) => {
                             if (p.markdown) return p.markdown;
-                            if (Array.isArray(p.lines)) return p.lines.map((l: any) => l.text || '').join('\n');
-                            if (Array.isArray(p.paragraphs)) return p.paragraphs.map((par: any) => par.text || '').join('\n');
+                            if (Array.isArray(p.lines)) return p.lines.map((l) => l.text || '').join('\n');
+                            if (Array.isArray(p.paragraphs)) return p.paragraphs.map((par) => par.text || '').join('\n');
                             return '';
                         })
                         .filter(Boolean)
                         .join('\n\n');
-                } else if (Array.isArray(respAny.blocks)) {
-                    extractedText = respAny.blocks.map((b: any) => b.text || '').filter(Boolean).join('\n');
+                } else if (Array.isArray(parsedResponse.blocks)) {
+                    extractedText = parsedResponse.blocks.map((b) => b.text || '').filter(Boolean).join('\n');
                 }
             } else {
                 // Use Pixtral vision model
@@ -132,12 +157,24 @@ export async function POST(req: Request) {
                     throw new Error(`Mistral API error: ${response.statusText}`);
                 }
 
-                const chatResponse = await response.json();
-                extractedText = chatResponse.choices[0].message.content || "";
+                const chatResponse = (await response.json()) as PixtralResponse;
+                extractedText = chatResponse.choices?.[0]?.message?.content || "";
             }
+        } else if (fileType === "text/csv" || fileName.toLowerCase().endsWith(".csv")) {
+            console.log("Processing CSV file:", fileName);
+            detectedFileType = "csv";
+            extractedText = Buffer.from(buffer).toString("utf-8");
+        } else if (
+            fileType === "text/plain" ||
+            fileName.toLowerCase().endsWith(".txt") ||
+            fileName.toLowerCase().endsWith(".md")
+        ) {
+            console.log("Processing text file:", fileName);
+            detectedFileType = "text";
+            extractedText = Buffer.from(buffer).toString("utf-8");
         } else {
             return NextResponse.json({
-                error: "Unsupported file type. Please upload a PDF or image file."
+                error: "Unsupported file type. Please upload PDF, image, CSV, or text file."
             }, { status: 400 });
         }
 
@@ -149,6 +186,7 @@ export async function POST(req: Request) {
                 file_type: detectedFileType,
                 auth_token: authToken,
                 origin: origin,
+                ...(user ? { user_id: user.id } : {}),
             })
             .select()
             .single();
@@ -172,6 +210,7 @@ export async function POST(req: Request) {
             pdf_name: string;
             chunk: string;
             embedding: number[];
+            user_id?: string;
         }[] = [];
 
         // Process in batches
@@ -200,6 +239,7 @@ export async function POST(req: Request) {
                     pdf_name: fileName,
                     chunk: batch[j],
                     embedding,
+                    ...(user ? { user_id: user.id } : {}),
                 });
             }
 
@@ -220,10 +260,16 @@ export async function POST(req: Request) {
         }
 
         // 5) Check if phone number mapping already exists
-        const { data: existingMappings } = await supabase
+        let existingMappingsQuery = supabase
             .from("phone_document_mapping")
             .select("*")
             .eq("phone_number", phoneNumber);
+
+        if (user) {
+            existingMappingsQuery = existingMappingsQuery.eq("user_id", user.id);
+        }
+
+        const { data: existingMappings } = await existingMappingsQuery;
 
         // Check if there's a mapping without a file_id (created via generate-system-prompt)
         const placeholderMapping = existingMappings?.find(m => m.file_id === null);
@@ -257,6 +303,7 @@ export async function POST(req: Request) {
                     system_prompt: existingMappings[0].system_prompt,
                     auth_token: authToken,
                     origin: origin,
+                    ...(user ? { user_id: user.id } : {}),
                     gemini_api_key: customGeminiKey || null,
                     groq_api_key: customGroqKey || null,
                     mistral_api_key: customMistralKey || null,
@@ -275,6 +322,7 @@ export async function POST(req: Request) {
                     intent: intent || null,
                     auth_token: authToken,
                     origin: origin,
+                    ...(user ? { user_id: user.id } : {}),
                     gemini_api_key: customGeminiKey || null,
                     groq_api_key: customGroqKey || null,
                     mistral_api_key: customMistralKey || null,

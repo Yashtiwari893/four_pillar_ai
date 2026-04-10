@@ -3,19 +3,37 @@ import Groq from "groq-sdk";
 import { supabase } from "@/lib/supabaseClient";
 import { embedText } from "@/lib/embeddings";
 import { retrieveRelevantChunks } from "@/lib/retrieval";
+import { buildRagSystemPrompt } from "@/lib/ragPrompt";
+import { getUserFromRequest } from "@/lib/authServer";
 
 const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY!,
 });
 
+type RetrievedChunk = {
+    id: string;
+    chunk?: string;
+    content?: string;
+    similarity: number;
+};
+
 export async function POST(req: Request) {
     try {
+        const user = await getUserFromRequest(req);
+
         const body = await req.json();
         const { session_id, message, file_id } = body;
 
         if (!session_id || !message) {
             return NextResponse.json(
                 { error: "session_id and message are required" },
+                { status: 400 }
+            );
+        }
+
+        if (!file_id) {
+            return NextResponse.json(
+                { error: "file_id is required" },
                 { status: 400 }
             );
         }
@@ -31,40 +49,43 @@ export async function POST(req: Request) {
         }
 
         // 2. Retrieve relevant chunks
-        const matches = await retrieveRelevantChunks(queryEmbedding, file_id, 5);
+        const matches = (await retrieveRelevantChunks(queryEmbedding, file_id, 5, user?.id)) as RetrievedChunk[];
 
-        const contextText = matches.map((m) => (m as any).chunk || (m as any).content || "").join("\n\n");
+        const contextChunks = matches
+            .map((m) => ({ chunk: m.chunk || m.content || "", similarity: m.similarity }))
+            .filter((m) => m.chunk.trim().length > 0);
 
         // 3. Load conversation history
-        const { data: historyRows } = await supabase
+        let historyQuery = supabase
             .from("messages")
             .select("role, content")
             .eq("session_id", session_id)
             .order("created_at", { ascending: true });
+
+        if (user) {
+            historyQuery = historyQuery.eq("user_id", user.id);
+        }
+
+        const { data: historyRows } = await historyQuery;
 
         const history = (historyRows || []).map(m => ({
             role: m.role,
             content: m.content
         }));
 
+        const recentHistory = history.slice(-16);
+        const lastMessage = recentHistory[recentHistory.length - 1];
+        const shouldAppendUserMessage =
+            !(lastMessage?.role === "user" && lastMessage?.content === message);
+
         // 4. Inject RAG context into Groq LLM
         const messages = [
             {
                 role: "system",
-                content:
-                    `You are a helpful document assistant. Your ONLY job is to answer questions based strictly on the provided document context.\n\n` +
-                    `STRICT RULES:\n` +
-                    `- ONLY answer questions using information from the CONTEXT below\n` +
-                    `- If the answer is not in the CONTEXT, say "I don't have that information in the document"\n` +
-                    `- NEVER use your general knowledge or make assumptions beyond the document\n` +
-                    `- NEVER offer to do tasks you cannot do (generate QR codes, create files, etc.)\n` +
-                    `- If asked about yourself or your technology, say "I can only answer questions about the document"\n` +
-                    `- Be concise, friendly, and use natural language\n` +
-                    `- Format responses with paragraphs and bullet points when appropriate\n\n` +
-                    `CONTEXT:\n${contextText}`
+                content: buildRagSystemPrompt(contextChunks),
             },
-            ...history,
-            { role: "user", content: message }
+            ...recentHistory,
+            ...(shouldAppendUserMessage ? [{ role: "user", content: message }] : [])
         ];
 
         // 5. Call Groq with streaming

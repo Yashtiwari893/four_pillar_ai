@@ -108,7 +108,7 @@ export default function SpeechToTextPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'aura-stt.txt';
+    a.download = '11za-rag-stt.txt';
     a.click();
   }, [transcription]);
 
@@ -144,7 +144,7 @@ export default function SpeechToTextPage() {
                     <ChevronLeft size={16} /> Back to Hub
                 </Link>
                 <h1 className="text-5xl font-black tracking-tighter text-gradient flex items-center justify-center md:justify-start gap-4">
-                    <Volume2 size={44} className="text-primary" /> AuraSound STT
+                    <Volume2 size={44} className="text-primary" /> 11za RAG STT
                 </h1>
                 <p className="text-muted-foreground text-lg font-medium max-w-2xl mx-auto md:mx-0">Convert multi-lingual audio into structured knowledge with high-precision neural transcription.</p>
             </header>

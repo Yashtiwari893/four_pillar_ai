@@ -147,7 +147,7 @@ export default function OCRPage() {
                             <ChevronLeft size={16} /> Back to Hub
                         </Link>
                         <h1 className="text-5xl font-black tracking-tighter text-gradient flex items-center gap-4">
-                            <Scan size={44} className="text-primary" /> AuraVision OCR
+                            <Scan size={44} className="text-primary" /> 11za RAG OCR
                         </h1>
                         <p className="text-muted-foreground text-lg font-medium max-w-2xl">Mistral-powered visual intelligence. Extract structured data from any image with cryptographic precision.</p>
                     </header>
@@ -268,7 +268,7 @@ export default function OCRPage() {
                                                 const url = URL.createObjectURL(blob);
                                                 const a = document.createElement('a');
                                                 a.href = url;
-                                                a.download = `aura-ocr-${Date.now()}.txt`;
+                                                a.download = `11za-rag-ocr-${Date.now()}.txt`;
                                                 a.click();
                                             }}>
                                                 <Download size={16} />

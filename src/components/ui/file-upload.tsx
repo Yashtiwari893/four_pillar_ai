@@ -10,7 +10,7 @@ interface FileUploadProps {
     selectedFile?: File | null;
 }
 
-export function FileUpload({ onFileSelect, accept = ".pdf,image/*", maxSize = 10, selectedFile }: FileUploadProps) {
+export function FileUpload({ onFileSelect, accept = ".pdf,.csv,.txt,.md,image/*", maxSize = 10, selectedFile }: FileUploadProps) {
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDrag = useCallback((e: React.DragEvent) => {
@@ -61,7 +61,7 @@ export function FileUpload({ onFileSelect, accept = ".pdf,image/*", maxSize = 10
             });
 
             if (!isValidType) {
-                alert('Invalid file type. Please upload a PDF or image file.');
+                alert('Invalid file type. Please upload PDF, CSV, text, markdown, or image file.');
                 return;
             }
 
@@ -164,7 +164,7 @@ export function FileUpload({ onFileSelect, accept = ".pdf,image/*", maxSize = 10
                                 <span className="font-semibold">Click to upload</span> or drag and drop
                             </p>
                             <p className="text-xs text-gray-500">
-                                PDF or Image files (Max {maxSize}MB)
+                                PDF, CSV, TXT, MD, or image files (Max {maxSize}MB)
                             </p>
                         </>
                     )}

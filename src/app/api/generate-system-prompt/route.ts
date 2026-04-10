@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { supabase } from "@/lib/supabaseClient";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getUserFromRequest } from "@/lib/authServer";
 
 const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY,
@@ -115,6 +116,8 @@ Write the system prompt now.`,
 
 export async function POST(req: NextRequest) {
     try {
+        const user = await getUserFromRequest(req);
+
         const body = await req.json();
         const { intent, phone_number, custom_prompt } = body;
         // custom_prompt = optional extra instructions added from the frontend UI
@@ -136,11 +139,17 @@ export async function POST(req: NextRequest) {
         let generatedPersona = "";
 
         // Fetch existing keys if any
-        const { data: currentMapping } = await supabase
+        let currentMappingQuery = supabase
             .from("phone_document_mapping")
             .select("gemini_api_key, groq_api_key")
             .eq("phone_number", phone_number)
             .single();
+
+        if (user) {
+            currentMappingQuery = currentMappingQuery.eq("user_id", user.id);
+        }
+
+        const { data: currentMapping } = await currentMappingQuery;
 
         const groqKey = currentMapping?.groq_api_key || process.env.GROQ_API_KEY;
         const geminiKey = currentMapping?.gemini_api_key || process.env.GEMINI_API_KEY;
@@ -207,10 +216,16 @@ export async function POST(req: NextRequest) {
         console.log("Final system prompt length:", finalSystemPrompt.length);
 
         // ── Persist to Supabase ───────────────────────────────────────────────
-        const { data: existingMappings } = await supabase
+        let existingMappingsQuery = supabase
             .from("phone_document_mapping")
             .select("*")
             .eq("phone_number", phone_number);
+
+        if (user) {
+            existingMappingsQuery = existingMappingsQuery.eq("user_id", user.id);
+        }
+
+        const { data: existingMappings } = await existingMappingsQuery;
 
         if (existingMappings && existingMappings.length > 0) {
             const { error: updateError } = await supabase
@@ -230,6 +245,7 @@ export async function POST(req: NextRequest) {
                     intent,
                     system_prompt: finalSystemPrompt,
                     file_id: null,
+                    ...(user ? { user_id: user.id } : {}),
                 });
 
             if (insertError) {

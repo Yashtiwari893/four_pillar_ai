@@ -1,17 +1,86 @@
 import { supabase } from "@/lib/supabaseClient";
 
+type ChunkRow = {
+    id: string;
+    chunk: string;
+    embedding: number[] | null;
+};
+
+type PhoneMatchRow = {
+    id: string;
+    content: string;
+    similarity: number;
+    source: string | null;
+    source_row_hash: string | null;
+};
+
+type FileMappingRow = {
+    file_id: string;
+};
+
+function cosineSimilarity(a: number[], b: number[]) {
+    if (a.length !== b.length || a.length === 0) return -1;
+
+    let dot = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < a.length; i++) {
+        dot += a[i] * b[i];
+        normA += a[i] * a[i];
+        normB += b[i] * b[i];
+    }
+
+    const denom = Math.sqrt(normA) * Math.sqrt(normB);
+    if (denom === 0) return -1;
+    return dot / denom;
+}
+
 export async function retrieveRelevantChunks(
     queryEmbedding: number[],
     fileId?: string,
-    limit = 5
+    limit = 5,
+    userId?: string
 ) {
-    // For now, since Google Sheets is the single source of truth,
-    // we'll search across all chunks for this phone number
-    // TODO: In the future, we could filter by fileId if needed
+    // If a file is explicitly selected, constrain retrieval to that file.
+    if (fileId) {
+        let query = supabase
+            .from("rag_chunks")
+            .select("id, chunk, embedding")
+            .eq("file_id", fileId)
+            .limit(300);
+
+        if (userId) {
+            query = query.eq("user_id", userId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error("FILE-SCOPED VECTOR SEARCH ERROR:", error);
+            throw error;
+        }
+
+        const ranked = ((data as ChunkRow[] | null) ?? [])
+            .map((row) => {
+                const embedding = Array.isArray(row.embedding) ? row.embedding : null;
+                return {
+                    id: row.id,
+                    chunk: row.chunk,
+                    similarity: embedding ? cosineSimilarity(queryEmbedding, embedding) : -1,
+                };
+            })
+            .filter((row) => row.similarity > 0)
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, limit);
+
+        return ranked;
+    }
+
     const { data, error } = await supabase.rpc("match_documents_by_phone", {
         query_embedding: queryEmbedding,
         match_count: limit,
-        target_phone: null, // Search across all phone numbers for now
+        target_phone: null,
     });
 
     if (error) {
@@ -75,7 +144,7 @@ export async function retrieveRelevantChunksForPhoneNumber(
         // Continue with empty array
     }
 
-    const phoneChunks = (directChunks || []).map((c: any) => ({
+    const phoneChunks = ((directChunks || []) as PhoneMatchRow[]).map((c) => ({
         id: c.id,
         chunk: c.content,
         similarity: c.similarity,
@@ -91,16 +160,17 @@ export async function retrieveRelevantChunksForPhoneNumber(
         .select("file_id")
         .eq("phone_number", phoneNumber);
 
-    const fileChunks = fileIds?.length ?
-        await retrieveRelevantChunksFromFiles(queryEmbedding, fileIds.map(f => f.file_id), limit) :
+    const fileRows = (fileIds || []) as FileMappingRow[];
+    const fileChunks = fileRows.length ?
+        await retrieveRelevantChunksFromFiles(queryEmbedding, fileRows.map((f) => f.file_id), limit) :
         [];
 
     console.log(`Found ${fileChunks.length} file-based chunks for phone ${phoneNumber}`);
 
     // Combine and sort all chunks
     const allChunks = [
-        ...phoneChunks.map((c: any) => ({ ...c, source: "phone" })),
-        ...fileChunks.map((c: any) => ({ ...c, source: "file" }))
+        ...phoneChunks.map((c) => ({ ...c, source: "phone" })),
+        ...fileChunks.map((c) => ({ ...c, source: "file" }))
     ];
 
     // Sort by similarity and return top results

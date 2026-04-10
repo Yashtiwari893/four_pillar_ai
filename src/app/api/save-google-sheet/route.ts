@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function POST(req: Request) {
   try {
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     // First, try to select from the table to see if it exists
     console.log("Testing table access...");
-    const { data: existing, error: selectError } = await supabase
+    const { data: existing, error: selectError } = await supabaseAdmin
       .from("google_sheet_mappings")
       .select("*")
       .eq("phone_number", phone_number)
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
     // Now try the upsert
     console.log("Attempting upsert...");
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from("google_sheet_mappings")
       .upsert(
         {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { readGoogleSheet } from "@/lib/googleSheet";
 import { embedText, embedBatch } from "@/lib/embeddings";
 import { createHash } from "crypto";
@@ -30,20 +30,21 @@ export async function POST(req: Request) {
     // 1️⃣ Get saved sheet mapping for this phone number
     let sheetMapping;
     try {
-      const { data, error: mappingError } = await supabase
+      const { data, error: mappingError } = await supabaseAdmin
         .from("google_sheet_mappings")
         .select("*")
         .eq("phone_number", phone_number)
-        .single();
+        .maybeSingle();
 
       if (mappingError) {
-        if (mappingError.code === 'PGRST116') {
-          return NextResponse.json(
-            { error: "No Google Sheet configured for this number" },
-            { status: 404 }
-          );
-        }
         throw mappingError;
+      }
+
+      if (!data) {
+        return NextResponse.json(
+          { error: "No Google Sheet configured for this number" },
+          { status: 404 }
+        );
       }
 
       sheetMapping = data;
@@ -56,12 +57,12 @@ export async function POST(req: Request) {
     }
 
     // ⭐ NEW: Fetch phone mapping to get custom API keys
-    const { data: phoneMapping } = await supabase
+    const { data: phoneMapping } = await supabaseAdmin
       .from("phone_document_mapping")
       .select("mistral_api_key")
       .eq("phone_number", phone_number)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     const mistralKey = phoneMapping?.mistral_api_key;
 
@@ -128,7 +129,7 @@ export async function POST(req: Request) {
     // 4️⃣ Get existing chunks for this phone number and source
     let existingChunks: Array<{ id: string; row_hash: string; content: string }> = [];
     try {
-      const { data: existingData, error: existingError } = await supabase
+      const { data: existingData, error: existingError } = await supabaseAdmin
         .from("chunks")
         .select("id, row_hash, content")
         .eq("phone_number", phone_number)
@@ -172,7 +173,7 @@ export async function POST(req: Request) {
     if (toDelete.length > 0) {
       try {
         const deleteIds = toDelete.map(chunk => chunk.id);
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await supabaseAdmin
           .from("chunks")
           .delete()
           .in("id", deleteIds);
@@ -203,7 +204,7 @@ export async function POST(req: Request) {
           const existing = existingHashToChunk.get(row.hash)!;
           const newEmbedding = await embedText(row.content, 3, mistralKey);
 
-          const { error: updateError } = await supabase
+          const { error: updateError } = await supabaseAdmin
             .from("chunks")
             .update({
               content: row.content,
@@ -258,7 +259,7 @@ export async function POST(req: Request) {
           }));
 
           // Insert chunks
-          const { error: insertError } = await supabase
+          const { error: insertError } = await supabaseAdmin
             .from("chunks")
             .insert(chunksToInsert);
 
@@ -290,7 +291,7 @@ export async function POST(req: Request) {
 
     // 9️⃣ Update last_synced_at and last_row_count
     try {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseAdmin
         .from("google_sheet_mappings")
         .update({
           last_synced_at: new Date().toISOString(),

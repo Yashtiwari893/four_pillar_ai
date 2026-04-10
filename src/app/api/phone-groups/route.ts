@@ -15,7 +15,8 @@ type MappingRow = {
     gemini_api_key: string | null;
     groq_api_key: string | null;
     mistral_api_key: string | null;
-    rag_files: { id: string; name: string; file_type: string; created_at: string } | null;
+    file_id: string | null;
+    rag_files: { id: string; name: string; file_type: string; created_at: string }[];
 };
 
 type LegacyMappingRow = Omit<MappingRow, "webhook_id" | "webhook_secret" | "webhook_enabled">;
@@ -111,6 +112,7 @@ export async function GET(req: Request) {
                 gemini_api_key: row.gemini_api_key,
                 groq_api_key: row.groq_api_key,
                 mistral_api_key: row.mistral_api_key,
+                file_id: row.file_id,
                 rag_files: row.rag_files,
             })) as MappingRow[];
         }
@@ -146,7 +148,7 @@ export async function GET(req: Request) {
 
         (mappings as MappingRow[] | null)?.forEach((mapping) => {
             const phone = mapping.phone_number;
-            const file = mapping.rag_files;
+            const file = mapping.rag_files?.[0] || null;
 
             if (!phoneGroups[phone]) {
                 phoneGroups[phone] = {

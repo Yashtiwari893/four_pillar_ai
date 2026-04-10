@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 import { generateAutoResponse } from "@/lib/autoResponder";
-import { transcribeAudio, type TranscriptionResult } from "../../../../stt/mistral/route";
+import { transcribeAudio, type TranscriptionResult } from "../../../stt/mistral/route";
 import { sendWhatsAppMessage } from "@/lib/whatsappSender";
 
 type WhatsAppWebhookPayload = {
@@ -191,22 +191,24 @@ async function handleIncomingWebhook(req: Request, webhookId: string) {
     return NextResponse.json({ success: true, message: "Webhook processed", data: data?.[0] });
 }
 
-export async function POST(req: Request, { params }: { params: { webhookId: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ webhookId: string }> }) {
     try {
-        return await handleIncomingWebhook(req, params.webhookId);
+        const { webhookId } = await params;
+        return await handleIncomingWebhook(req, webhookId);
     } catch (error) {
         console.error("WEBHOOK_DYNAMIC_ERROR:", error);
         return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
     }
 }
 
-export async function GET(req: Request, { params }: { params: { webhookId: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ webhookId: string }> }) {
+    const { webhookId } = await params;
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get("hub.mode");
     const token = searchParams.get("hub.verify_token") || getWebhookToken(req);
     const challenge = searchParams.get("hub.challenge");
 
-    const { mapping } = await resolveWebhookMapping(params.webhookId);
+    const { mapping } = await resolveWebhookMapping(webhookId);
     if (!mapping) {
         return NextResponse.json({ error: "Webhook not found" }, { status: 404 });
     }
@@ -215,7 +217,7 @@ export async function GET(req: Request, { params }: { params: { webhookId: strin
         await supabase
             .from("phone_document_mapping")
             .update({ webhook_last_verified_at: new Date().toISOString() })
-            .eq("webhook_id", params.webhookId);
+            .eq("webhook_id", webhookId);
 
         return new Response(challenge, { status: 200 });
     }

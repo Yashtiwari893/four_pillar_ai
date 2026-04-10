@@ -142,14 +142,13 @@ export async function POST(req: NextRequest) {
         let currentMappingQuery = supabase
             .from("phone_document_mapping")
             .select("gemini_api_key, groq_api_key")
-            .eq("phone_number", phone_number)
-            .single();
+            .eq("phone_number", phone_number);
 
         if (user) {
             currentMappingQuery = currentMappingQuery.eq("user_id", user.id);
         }
 
-        const { data: currentMapping } = await currentMappingQuery;
+        const { data: currentMapping } = await currentMappingQuery.single();
 
         const groqKey = currentMapping?.groq_api_key || process.env.GROQ_API_KEY;
         const geminiKey = currentMapping?.gemini_api_key || process.env.GEMINI_API_KEY;

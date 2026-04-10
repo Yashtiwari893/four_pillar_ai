@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getUserFromRequest } from "@/lib/authServer";
 
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
         let generatedPersona = "";
 
         // Fetch existing keys if any
-        let currentMappingQuery = supabase
+        let currentMappingQuery = supabaseAdmin
             .from("phone_document_mapping")
             .select("gemini_api_key, groq_api_key")
             .eq("phone_number", phone_number);
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
             currentMappingQuery = currentMappingQuery.eq("user_id", user.id);
         }
 
-        const { data: currentMapping } = await currentMappingQuery.single();
+        const { data: currentMapping } = await currentMappingQuery.maybeSingle();
 
         const groqKey = currentMapping?.groq_api_key || process.env.GROQ_API_KEY;
         const geminiKey = currentMapping?.gemini_api_key || process.env.GEMINI_API_KEY;
@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
         console.log("Final system prompt length:", finalSystemPrompt.length);
 
         // ── Persist to Supabase ───────────────────────────────────────────────
-        let existingMappingsQuery = supabase
+        let existingMappingsQuery = supabaseAdmin
             .from("phone_document_mapping")
             .select("*")
             .eq("phone_number", phone_number);
@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
         const { data: existingMappings } = await existingMappingsQuery;
 
         if (existingMappings && existingMappings.length > 0) {
-            const { error: updateError } = await supabase
+            const { error: updateError } = await supabaseAdmin
                 .from("phone_document_mapping")
                 .update({ intent, system_prompt: finalSystemPrompt })
                 .eq("phone_number", phone_number);
@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
                 throw updateError;
             }
         } else {
-            const { error: insertError } = await supabase
+            const { error: insertError } = await supabaseAdmin
                 .from("phone_document_mapping")
                 .insert({
                     phone_number,

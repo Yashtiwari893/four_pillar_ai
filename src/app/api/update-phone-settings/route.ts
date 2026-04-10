@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserFromRequest } from "@/lib/authServer";
 
 export async function POST(req: NextRequest) {
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
         console.log("Updating phone settings for:", phone_number);
 
         // Check if phone number has any mappings
-        let existingMappingsQuery = supabase
+        let existingMappingsQuery = supabaseAdmin
             .from("phone_document_mapping")
             .select("*")
             .eq("phone_number", phone_number);
@@ -30,11 +30,25 @@ export async function POST(req: NextRequest) {
 
         const { data: existingMappings } = await existingMappingsQuery;
 
-        if (!existingMappings || existingMappings.length === 0) {
-            return NextResponse.json(
-                { error: "Phone number not found" },
-                { status: 404 }
-            );
+        let mappings = existingMappings || [];
+
+        // If mapping doesn't exist yet, create it so settings can be saved in one step.
+        if (mappings.length === 0) {
+            const { data: insertedMapping, error: insertError } = await supabaseAdmin
+                .from("phone_document_mapping")
+                .insert({
+                    phone_number,
+                    ...(user ? { user_id: user.id } : {}),
+                })
+                .select("*")
+                .single();
+
+            if (insertError) {
+                console.error("Error creating phone_document_mapping:", insertError);
+                throw insertError;
+            }
+
+            mappings = insertedMapping ? [insertedMapping] : [];
         }
 
         // Update all mappings for this phone number
@@ -47,7 +61,7 @@ export async function POST(req: NextRequest) {
         if (groq_api_key !== undefined) updateData.groq_api_key = groq_api_key;
         if (mistral_api_key !== undefined) updateData.mistral_api_key = mistral_api_key;
 
-        let updateMappingsQuery = supabase
+        let updateMappingsQuery = supabaseAdmin
             .from("phone_document_mapping")
             .update(updateData)
             .eq("phone_number", phone_number);
@@ -65,7 +79,7 @@ export async function POST(req: NextRequest) {
 
         // Also update credentials in all associated files for consistency
         if (auth_token !== undefined || origin !== undefined) {
-            const fileIds = existingMappings
+            const fileIds = mappings
                 .map(m => m.file_id)
                 .filter(id => id !== null);
 
@@ -74,7 +88,7 @@ export async function POST(req: NextRequest) {
                 if (auth_token !== undefined) updateFileData.auth_token = auth_token;
                 if (origin !== undefined) updateFileData.origin = origin;
 
-                let updateFilesQuery = supabase
+                let updateFilesQuery = supabaseAdmin
                     .from("rag_files")
                     .update(updateFileData)
                     .in("id", fileIds);

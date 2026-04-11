@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getGoogleDocMetadata } from "@/lib/googleDoc";
 
 export async function POST(req: Request) {
@@ -27,13 +27,13 @@ export async function POST(req: Request) {
 
     // First, try to select from the table to see if it exists
     console.log("Testing table access...");
-    const { data: existing, error: selectError } = await supabase
+    const { data: existing, error: selectError } = await supabaseAdmin
       .from("google_doc_mappings")
       .select("*")
       .eq("phone_number", phone_number)
-      .single();
+      .maybeSingle();
 
-    if (selectError && selectError.code !== 'PGRST116') {
+    if (selectError) {
       console.error("Select error:", selectError);
       return NextResponse.json(
         { error: `Table access error: ${selectError.message}`, code: selectError.code },
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
     // Now try the upsert
     console.log("Attempting upsert...");
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from("google_doc_mappings")
       .upsert(
         {

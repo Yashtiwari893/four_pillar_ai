@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserFromRequest } from "@/lib/authServer";
 
 type ChunkCountRow = { file_id: string | null };
@@ -41,7 +41,7 @@ export async function GET(req: Request) {
         const user = await getUserFromRequest(req);
 
         // Try modern schema first (with webhook columns).
-        let mappingsQuery = supabase
+        let mappingsQuery = supabaseAdmin
             .from("phone_document_mapping")
             .select(`
                 phone_number,
@@ -66,14 +66,14 @@ export async function GET(req: Request) {
             .order("phone_number", { ascending: true });
 
         if (user) {
-            mappingsQuery = mappingsQuery.eq("user_id", user.id);
+            mappingsQuery = mappingsQuery.or(`user_id.eq.${user.id},user_id.is.null`);
         }
 
         let { data: mappings, error: mappingError } = await mappingsQuery;
 
         // Backward-compatible fallback for environments where webhook migration hasn't run yet.
         if (mappingError && /webhook_(id|secret|enabled)/i.test(mappingError.message || "")) {
-            let legacyQuery = supabase
+            let legacyQuery = supabaseAdmin
                 .from("phone_document_mapping")
                 .select(`
                     phone_number,
@@ -95,7 +95,7 @@ export async function GET(req: Request) {
                 .order("phone_number", { ascending: true });
 
             if (user) {
-                legacyQuery = legacyQuery.eq("user_id", user.id);
+                legacyQuery = legacyQuery.or(`user_id.eq.${user.id},user_id.is.null`);
             }
 
             const legacyResult = await legacyQuery;
@@ -122,12 +122,12 @@ export async function GET(req: Request) {
         }
 
         // Get chunk counts for each file
-        let chunkQuery = supabase
+        let chunkQuery = supabaseAdmin
             .from("rag_chunks")
             .select("file_id");
 
         if (user) {
-            chunkQuery = chunkQuery.eq("user_id", user.id);
+            chunkQuery = chunkQuery.or(`user_id.eq.${user.id},user_id.is.null`);
         }
 
         const { data: chunkCounts, error: chunkError } = await chunkQuery;

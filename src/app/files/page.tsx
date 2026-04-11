@@ -246,10 +246,17 @@ export default function FilesPage() {
             const data = await res.json();
             if (res.ok && data.success) {
                 setPhoneGroups(data.groups || []);
+            } else {
+                setPhoneGroups([]);
+                setFeedback({
+                    type: "error",
+                    message: data?.error || "Could not load bot profiles.",
+                });
             }
         } catch (error) {
             console.error("Error loading phone groups", error);
             setFeedback({ type: "error", message: "Could not load bot profiles." });
+            setPhoneGroups([]);
         } finally {
             setIsLoadingGroups(false);
         }

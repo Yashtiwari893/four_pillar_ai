@@ -31,6 +31,7 @@ function DocPreviewContent() {
   const [docId, setDocId] = useState<string | null>(null);
   const [docName, setDocName] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [totalChunks, setTotalChunks] = useState(0);
 
   const fetchDocPreview = useCallback(async () => {
     if (!phone_number) return;
@@ -47,6 +48,7 @@ function DocPreviewContent() {
       setDocId(data.docId || null);
       setDocName(data.docName || null);
       setLastSyncedAt(data.last_synced_at || null);
+      setTotalChunks(data.total || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -158,7 +160,7 @@ function DocPreviewContent() {
                         <div className="p-10 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
                             <h3 className="text-xl font-bold flex items-center gap-3">
                                 <Database size={20} className="text-primary" /> Memory Shards
-                                <span className="text-[10px] font-black py-1 px-3 bg-primary/20 text-primary rounded-full">{chunks.length} UNITS</span>
+                                <span className="text-[10px] font-black py-1 px-3 bg-primary/20 text-primary rounded-full">{totalChunks} UNITS</span>
                             </h3>
                             <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
                         </div>

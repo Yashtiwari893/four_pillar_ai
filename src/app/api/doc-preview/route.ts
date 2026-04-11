@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -16,11 +16,11 @@ export async function GET(req: Request) {
     }
 
     // 1️⃣ Fetch doc mapping for this phone number
-    const { data: mapping, error: mappingError } = await supabase
+    const { data: mapping, error: mappingError } = await supabaseAdmin
       .from("google_doc_mappings")
       .select("doc_id, doc_name, last_synced_at, last_chunk_count")
       .eq("phone_number", phoneNumber)
-      .single();
+      .maybeSingle();
 
     if (mappingError || !mapping) {
       return NextResponse.json({
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     }
 
     // 2️⃣ Get first 20 chunks for preview
-    const { data: chunks, error: chunksError } = await supabase
+    const { data: chunks, error: chunksError } = await supabaseAdmin
       .from("chunks")
       .select("content")
       .eq("phone_number", phoneNumber)
@@ -50,14 +50,29 @@ export async function GET(req: Request) {
       );
     }
 
+    const { count: totalCount, error: countError } = await supabaseAdmin
+      .from("chunks")
+      .select("*", { count: "exact", head: true })
+      .eq("phone_number", phoneNumber)
+      .eq("source", "google_doc");
+
+    if (countError) {
+      console.error("Error counting doc chunks:", countError);
+      return NextResponse.json(
+        { error: "Failed to count doc chunks" },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       connected: true,
       docId: mapping.doc_id,
       docName: mapping.doc_name,
       chunks: chunks || [],
-      total: chunks?.length || 0,
-      last_synced_at: mapping.last_synced_at
+      total: totalCount || 0,
+      last_synced_at: mapping.last_synced_at,
+      last_chunk_count: mapping.last_chunk_count || 0,
     });
   } catch (err) {
     console.error("Unexpected error:", err);

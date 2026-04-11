@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -16,13 +16,13 @@ export async function GET(req: Request) {
     }
 
     // Get sheet mapping and sync status
-    const { data: mapping, error: mappingError } = await supabase
+    const { data: mapping, error: mappingError } = await supabaseAdmin
       .from("google_sheet_mappings")
       .select("sheet_id, last_synced_at, last_row_count")
       .eq("phone_number", phoneNumber)
-      .single();
+      .maybeSingle();
 
-    if (mappingError && mappingError.code !== 'PGRST116') {
+    if (mappingError) {
       console.error("Error fetching sheet mapping:", mappingError);
       return NextResponse.json(
         { error: "Failed to fetch sheet status" },
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     }
 
     // Get chunk count for this phone number
-    const { count: chunkCount, error: countError } = await supabase
+    const { count: chunkCount, error: countError } = await supabaseAdmin
       .from("chunks")
       .select("*", { count: 'exact', head: true })
       .eq("phone_number", phoneNumber)

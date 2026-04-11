@@ -1,19 +1,14 @@
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { embedText } from "@/lib/embeddings";
-import { retrieveRelevantChunks } from "@/lib/retrieval";
+import { retrieveRelevantChunksForPhoneNumber } from "@/lib/retrieval";
 import { buildRagSystemPrompt } from "@/lib/ragPrompt";
 import { getUserFromRequest } from "@/lib/authServer";
 
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY!,
-});
-
 type RetrievedChunk = {
     id: string;
-    chunk?: string;
-    content?: string;
+    chunk: string;
     similarity: number;
 };
 
@@ -22,7 +17,10 @@ export async function POST(req: Request) {
         const user = await getUserFromRequest(req);
 
         const body = await req.json();
-        const { session_id, message, file_id } = body;
+        const { session_id, message, selected_number_id, number_id, test_via_webhook } = body;
+        void test_via_webhook;
+
+        const selectedNumber = selected_number_id || number_id;
 
         if (!session_id || !message) {
             return NextResponse.json(
@@ -31,15 +29,37 @@ export async function POST(req: Request) {
             );
         }
 
-        if (!file_id) {
+        if (!selectedNumber) {
             return NextResponse.json(
-                { error: "file_id is required" },
+                { error: "selected_number_id (or number_id) is required" },
                 { status: 400 }
             );
         }
 
+        const { data: mapping, error: mappingError } = await supabaseAdmin
+            .from("phone_document_mapping")
+            .select("system_prompt, mistral_api_key, groq_api_key")
+            .eq("phone_number", selectedNumber)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (mappingError) {
+            return NextResponse.json(
+                { error: "Failed to load bot configuration" },
+                { status: 500 }
+            );
+        }
+
+        if (!mapping) {
+            return NextResponse.json(
+                { error: "No bot profile found for selected number" },
+                { status: 404 }
+            );
+        }
+
         // 1. Embed the user query
-        const queryEmbedding = await embedText(message);
+        const queryEmbedding = await embedText(message, 3, mapping.mistral_api_key);
 
         if (!queryEmbedding) {
             return NextResponse.json(
@@ -48,15 +68,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // 2. Retrieve relevant chunks
-        const matches = (await retrieveRelevantChunks(queryEmbedding, file_id, 5, user?.id)) as RetrievedChunk[];
+        // 2. Retrieve relevant chunks for this selected bot number
+        const matches = (await retrieveRelevantChunksForPhoneNumber(queryEmbedding, selectedNumber, 6)) as RetrievedChunk[];
 
         const contextChunks = matches
-            .map((m) => ({ chunk: m.chunk || m.content || "", similarity: m.similarity }))
+            .map((m) => ({ chunk: m.chunk || "", similarity: m.similarity }))
             .filter((m) => m.chunk.trim().length > 0);
 
         // 3. Load conversation history
-        let historyQuery = supabase
+        let historyQuery = supabaseAdmin
             .from("messages")
             .select("role, content")
             .eq("session_id", session_id)
@@ -79,17 +99,24 @@ export async function POST(req: Request) {
             !(lastMessage?.role === "user" && lastMessage?.content === message);
 
         // 4. Inject RAG context into Groq LLM
+        const customSystemPrompt = mapping.system_prompt?.trim() || "";
+        const ragPrompt = buildRagSystemPrompt(contextChunks);
+        const mergedSystemPrompt = customSystemPrompt
+            ? `${customSystemPrompt}\n\n${ragPrompt}`
+            : ragPrompt;
+
         const messages = [
             {
                 role: "system",
-                content: buildRagSystemPrompt(contextChunks),
+                content: mergedSystemPrompt,
             },
             ...recentHistory,
             ...(shouldAppendUserMessage ? [{ role: "user", content: message }] : [])
         ];
 
         // 5. Call Groq with streaming
-        const completion = await groq.chat.completions.create({
+        const localGroq = new Groq({ apiKey: mapping.groq_api_key || process.env.GROQ_API_KEY! });
+        const completion = await localGroq.chat.completions.create({
             model: "llama-3.3-70b-versatile",
             messages,
             temperature: 0.2,

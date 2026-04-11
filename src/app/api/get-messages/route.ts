@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserFromRequest } from "@/lib/authServer";
 
 export async function GET(req: Request) {
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "session_id is required" }, { status: 400 });
     }
 
-    let query = supabase
+    let query = supabaseAdmin
         .from("messages")
         .select("role, content")
         .eq("session_id", session_id)

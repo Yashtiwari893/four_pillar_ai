@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -16,11 +16,11 @@ export async function GET(req: Request) {
     }
 
     // 1️⃣ Fetch sheet mapping for this phone number
-    const { data: mapping, error: mappingError } = await supabase
+    const { data: mapping, error: mappingError } = await supabaseAdmin
       .from("google_sheet_mappings")
       .select("sheet_id, last_synced_at, last_row_count")
       .eq("phone_number", phoneNumber)
-      .single();
+      .maybeSingle();
 
     if (mappingError || !mapping) {
       return NextResponse.json({
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     }
 
     // 2️⃣ Get first 20 chunks for preview
-    const { data: chunks, error: chunksError } = await supabase
+    const { data: chunks, error: chunksError } = await supabaseAdmin
       .from("chunks")
       .select("content")
       .eq("phone_number", phoneNumber)

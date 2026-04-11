@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserFromRequest } from "@/lib/authServer";
 
 export const runtime = "nodejs";
@@ -8,18 +8,18 @@ export async function GET(req: Request) {
     try {
         const user = await getUserFromRequest(req);
 
-        const filesQuery = supabase.from("rag_files").select("id", { count: "exact", head: true });
-        const chunksQuery = supabase.from("rag_chunks").select("id", { count: "exact", head: true });
-        const botsQuery = supabase.from("phone_document_mapping").select("phone_number");
-        const chatMessagesQuery = supabase.from("messages").select("id", { count: "exact", head: true });
-        const waMessagesQuery = supabase.from("whatsapp_messages").select("id", { count: "exact", head: true });
+        const filesQuery = supabaseAdmin.from("rag_files").select("id", { count: "exact", head: true });
+        const chunksQuery = supabaseAdmin.from("rag_chunks").select("id", { count: "exact", head: true });
+        const botsQuery = supabaseAdmin.from("phone_document_mapping").select("phone_number");
+        const chatMessagesQuery = supabaseAdmin.from("messages").select("id", { count: "exact", head: true });
+        const waMessagesQuery = supabaseAdmin.from("whatsapp_messages").select("id", { count: "exact", head: true });
 
         if (user) {
-            filesQuery.eq("user_id", user.id);
-            chunksQuery.eq("user_id", user.id);
-            botsQuery.eq("user_id", user.id);
-            chatMessagesQuery.eq("user_id", user.id);
-            waMessagesQuery.eq("user_id", user.id);
+            filesQuery.or(`user_id.eq.${user.id},user_id.is.null`);
+            chunksQuery.or(`user_id.eq.${user.id},user_id.is.null`);
+            botsQuery.or(`user_id.eq.${user.id},user_id.is.null`);
+            chatMessagesQuery.or(`user_id.eq.${user.id},user_id.is.null`);
+            waMessagesQuery.or(`user_id.eq.${user.id},user_id.is.null`);
         }
 
         const [

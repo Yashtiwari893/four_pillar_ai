@@ -1,9 +1,9 @@
 "use client";
 
-import { KeyboardEvent, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { v4 as uuid } from "uuid";
-import { Bot, Send, Sparkles, User } from "lucide-react";
+import { Bot, RotateCcw, Send, Sparkles, Trash2, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,19 +16,34 @@ type ChatMessage = {
     content: string;
 };
 
-type FileItem = {
-    id: string;
-    name: string;
+type BotProfile = {
+    phone_number: string;
+    intent: string | null;
 };
 
 type ChatSession = {
     id: string;
     title: string;
     updatedAt: string;
-    fileId?: string;
 };
 
-const CHAT_SESSIONS_KEY = "chat_sessions";
+const SELECTED_NUMBER_KEY = "chat_selected_number";
+const sessionListKey = (numberId: string) => `chat_sessions_${numberId}`;
+const activeSessionKey = (numberId: string) => `chat_session_id_${numberId}`;
+
+function readSessions(numberId: string): ChatSession[] {
+    const raw = localStorage.getItem(sessionListKey(numberId));
+    if (!raw) return [];
+    try {
+        return JSON.parse(raw) as ChatSession[];
+    } catch {
+        return [];
+    }
+}
+
+function writeSessions(numberId: string, sessions: ChatSession[]) {
+    localStorage.setItem(sessionListKey(numberId), JSON.stringify(sessions.slice(0, 30)));
+}
 
 export default function ChatPage() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -36,83 +51,110 @@ export default function ChatPage() {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
     const [isThinking, setIsThinking] = useState(false);
-    const [files, setFiles] = useState<FileItem[]>([]);
-    const [selectedFile, setSelectedFile] = useState<string | null>(null);
+    const [isLoadingBots, setIsLoadingBots] = useState(true);
+    const [botProfiles, setBotProfiles] = useState<BotProfile[]>([]);
+    const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
+    const [testViaWebhook, setTestViaWebhook] = useState(false);
     const [sessions, setSessions] = useState<ChatSession[]>([]);
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
+    const selectedBot = useMemo(
+        () => botProfiles.find((bot) => bot.phone_number === selectedNumber) || null,
+        [botProfiles, selectedNumber]
+    );
 
-    function persistSessions(next: ChatSession[]) {
+    function persistSessions(numberId: string, next: ChatSession[]) {
         const compact = next.slice(0, 20);
         setSessions(compact);
-        localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(compact));
+        writeSessions(numberId, compact);
     }
 
-    function createSession(fileId?: string | null) {
-        const id = uuid();
+    function createSession(numberId: string) {
+        const id = `${numberId}__${uuid()}`;
         const nextSession: ChatSession = {
             id,
             title: "New conversation",
             updatedAt: new Date().toISOString(),
-            fileId: fileId || undefined,
         };
 
-        const existingRaw = localStorage.getItem(CHAT_SESSIONS_KEY);
-        const existing = existingRaw ? (JSON.parse(existingRaw) as ChatSession[]) : [];
-        persistSessions([nextSession, ...existing.filter((s) => s.id !== id)]);
-        localStorage.setItem("chat_session_id", id);
+        const existing = readSessions(numberId);
+        persistSessions(numberId, [nextSession, ...existing.filter((s) => s.id !== id)]);
+        localStorage.setItem(activeSessionKey(numberId), id);
         setSessionId(id);
         setMessages([]);
     }
 
     useEffect(() => {
-        const stored = localStorage.getItem(CHAT_SESSIONS_KEY);
-        const parsed = stored ? (JSON.parse(stored) as ChatSession[]) : [];
-        setSessions(parsed);
-
-        const storedSessionId = localStorage.getItem("chat_session_id");
-        if (storedSessionId) {
-            setSessionId(storedSessionId);
-            return;
-        }
-
-        const id = uuid();
-        const nextSession: ChatSession = {
-            id,
-            title: "New conversation",
-            updatedAt: new Date().toISOString(),
-        };
-        const nextSessions = [nextSession, ...parsed.filter((s) => s.id !== id)].slice(0, 20);
-        setSessions(nextSessions);
-        localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(nextSessions));
-        localStorage.setItem("chat_session_id", id);
-        setSessionId(id);
-    }, []);
-
-    useEffect(() => {
-        async function loadFiles() {
+        async function loadBotProfiles() {
             try {
-                const res = await authedFetch("/api/files");
-                if (!res.ok) {
+                setIsLoadingBots(true);
+                const res = await authedFetch("/api/phone-groups");
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    setBotProfiles([]);
                     return;
                 }
-                const data = await res.json();
-                const fetchedFiles: FileItem[] = data.files || [];
-                setFiles(fetchedFiles);
 
-                if (fetchedFiles.length > 0) {
-                    const activeSession = sessions.find((s) => s.id === sessionId);
-                    const preferredFile = activeSession?.fileId;
-                    const exists = preferredFile && fetchedFiles.some((f) => f.id === preferredFile);
-                    setSelectedFile(exists ? preferredFile! : fetchedFiles[0].id);
+                const list: BotProfile[] = (data.groups || []).map((item: { phone_number: string; intent?: string | null }) => ({
+                    phone_number: item.phone_number,
+                    intent: item.intent || null,
+                }));
+
+                setBotProfiles(list);
+
+                if (list.length === 0) {
+                    setSelectedNumber(null);
+                    setSessions([]);
+                    setSessionId(null);
+                    return;
                 }
+
+                const storedNumber = localStorage.getItem(SELECTED_NUMBER_KEY);
+                const validStored = storedNumber && list.some((p) => p.phone_number === storedNumber);
+                const nextNumber = validStored ? storedNumber : list[0].phone_number;
+                setSelectedNumber(nextNumber);
+                localStorage.setItem(SELECTED_NUMBER_KEY, nextNumber);
             } catch (error) {
-                console.error("Failed to load files", error);
+                console.error("Failed to load bot profiles", error);
+                setBotProfiles([]);
+                setSelectedNumber(null);
+                setSessions([]);
+                setSessionId(null);
+            } finally {
+                setIsLoadingBots(false);
             }
         }
 
-        void loadFiles();
-    }, [sessionId, sessions]);
+        void loadBotProfiles();
+    }, []);
+
+    useEffect(() => {
+        if (!selectedNumber) {
+            setSessions([]);
+            setSessionId(null);
+            setMessages([]);
+            return;
+        }
+
+        const numberSessions = readSessions(selectedNumber);
+        setSessions(numberSessions);
+
+        const storedActive = localStorage.getItem(activeSessionKey(selectedNumber));
+        const activeExists = storedActive && numberSessions.some((s) => s.id === storedActive);
+
+        if (activeExists) {
+            setSessionId(storedActive);
+            return;
+        }
+
+        if (numberSessions.length > 0) {
+            setSessionId(numberSessions[0].id);
+            localStorage.setItem(activeSessionKey(selectedNumber), numberSessions[0].id);
+            return;
+        }
+
+        createSession(selectedNumber);
+    }, [selectedNumber]);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -136,18 +178,18 @@ export default function ChatPage() {
     }, [sessionId]);
 
     async function sendMessage() {
-        if (!input.trim() || !sessionId || isSending || !selectedFile) return;
+        if (!input.trim() || !sessionId || isSending || !selectedNumber) return;
 
         const content = input.trim();
         const userMessage: ChatMessage = { role: "user", content };
 
         persistSessions(
+            selectedNumber,
             [
                 {
                     id: sessionId,
                     title: content.slice(0, 56),
                     updatedAt: new Date().toISOString(),
-                    fileId: selectedFile,
                 },
                 ...sessions.filter((s) => s.id !== sessionId),
             ]
@@ -163,6 +205,7 @@ export default function ChatPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     session_id: sessionId,
+                    selected_number_id: selectedNumber,
                     role: "user",
                     content,
                 }),
@@ -176,7 +219,9 @@ export default function ChatPage() {
                 body: JSON.stringify({
                     session_id: sessionId,
                     message: content,
-                    file_id: selectedFile,
+                    selected_number_id: selectedNumber,
+                    user_id: null,
+                    test_via_webhook: testViaWebhook,
                 }),
             });
 
@@ -218,6 +263,7 @@ export default function ChatPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     session_id: sessionId,
+                    selected_number_id: selectedNumber,
                     role: "assistant",
                     content: fullReply,
                 }),
@@ -246,50 +292,111 @@ export default function ChatPage() {
     }
 
     function resetChat() {
-        createSession(selectedFile);
+        if (!selectedNumber) return;
+        createSession(selectedNumber);
     }
 
     function switchSession(targetSessionId: string) {
+        if (!selectedNumber) return;
         setSessionId(targetSessionId);
-        localStorage.setItem("chat_session_id", targetSessionId);
+        localStorage.setItem(activeSessionKey(selectedNumber), targetSessionId);
+    }
 
-        const selectedSession = sessions.find((s) => s.id === targetSessionId);
-        if (selectedSession?.fileId) {
-            setSelectedFile(selectedSession.fileId);
+    function switchNumber(numberId: string) {
+        setSelectedNumber(numberId);
+        localStorage.setItem(SELECTED_NUMBER_KEY, numberId);
+    }
+
+    async function deleteConversation(sessionToDelete: string) {
+        if (!selectedNumber) return;
+        const ok = window.confirm("Delete this conversation permanently? This removes it from the database too.");
+        if (!ok) return;
+
+        try {
+            const res = await authedFetch("/api/delete-chat-session", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    session_id: sessionToDelete,
+                    selected_number_id: selectedNumber,
+                }),
+            });
+
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data?.error || "Failed to delete conversation");
+            }
+
+            const nextSessions = sessions.filter((session) => session.id !== sessionToDelete);
+            persistSessions(selectedNumber, nextSessions);
+
+            if (sessionId === sessionToDelete) {
+                localStorage.removeItem(activeSessionKey(selectedNumber));
+                setMessages([]);
+                if (nextSessions.length > 0) {
+                    setSessionId(nextSessions[0].id);
+                    localStorage.setItem(activeSessionKey(selectedNumber), nextSessions[0].id);
+                } else {
+                    createSession(selectedNumber);
+                }
+            }
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Failed to delete conversation");
         }
     }
 
     return (
         <AppShell
             title="Chat Console"
-            subtitle="Ask questions against your selected knowledge source and iterate quickly."
-            contentClassName="p-0 flex overflow-hidden pb-20 md:pb-0"
-            headerActions={<Button variant="outline" onClick={resetChat}>New Chat</Button>}
+            subtitle="Select a bot number and test exactly how that bot responds."
+            contentClassName="p-0 flex min-h-0 overflow-hidden pb-20 md:pb-0"
+            headerActions={
+                <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                        <input
+                            type="checkbox"
+                            checked={testViaWebhook}
+                            onChange={(e) => setTestViaWebhook(e.target.checked)}
+                            className="h-3.5 w-3.5"
+                        />
+                        Test via Webhook
+                    </label>
+                    <Button variant="outline" onClick={resetChat} disabled={!selectedNumber}>
+                        <RotateCcw size={14} />
+                        Reset Chat
+                    </Button>
+                    <Button variant="outline" onClick={resetChat} disabled={!selectedNumber}>New Chat</Button>
+                </div>
+            }
             sidebarExtras={
                 <>
                     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-semibold text-slate-700">Knowledge Source</p>
-                        <p className="mt-1 text-xs text-slate-500">Choose which file this chat should reference.</p>
+                        <p className="text-xs font-semibold text-slate-700">Testing Bot</p>
+                        <p className="mt-1 text-xs text-slate-500">Select WhatsApp number to test that bot configuration.</p>
                         <div className="mt-3 space-y-2">
-                            {files.length === 0 ? (
+                            {isLoadingBots ? (
                                 <p className="rounded-lg border border-dashed border-slate-200 p-3 text-xs text-slate-500">
-                                    No files found. Add documents in Data Sources.
+                                    Loading numbers...
+                                </p>
+                            ) : botProfiles.length === 0 ? (
+                                <p className="rounded-lg border border-dashed border-slate-200 p-3 text-xs text-slate-500">
+                                    No bot numbers found. Create one in Data Sources.
                                 </p>
                             ) : (
-                                files.map((file) => (
+                                botProfiles.map((bot) => (
                                     <button
-                                        key={file.id}
-                                        onClick={() => {
-                                            setSelectedFile(file.id);
-                                            resetChat();
-                                        }}
+                                        key={bot.phone_number}
+                                        onClick={() => switchNumber(bot.phone_number)}
                                         className={`w-full rounded-lg border px-3 py-2 text-left text-xs ${
-                                            selectedFile === file.id
+                                            selectedNumber === bot.phone_number
                                                 ? "border-slate-900 bg-slate-900 text-white"
                                                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                                         }`}
                                     >
-                                        {file.name}
+                                        <p className="truncate font-medium">{bot.phone_number}</p>
+                                        <p className={`truncate text-[11px] ${selectedNumber === bot.phone_number ? "text-slate-200" : "text-slate-400"}`}>
+                                            {bot.intent || "No intent configured"}
+                                        </p>
                                     </button>
                                 ))
                             )}
@@ -302,21 +409,38 @@ export default function ChatPage() {
                         <div className="mt-3 space-y-2">
                             {sessions.length === 0 ? (
                                 <p className="rounded-lg border border-dashed border-slate-200 p-3 text-xs text-slate-500">
-                                    No previous sessions.
+                                    No previous sessions for this number.
                                 </p>
                             ) : (
                                 sessions.map((session) => (
-                                    <button
+                                    <div
                                         key={session.id}
-                                        onClick={() => switchSession(session.id)}
-                                        className={`w-full rounded-lg border px-3 py-2 text-left text-xs ${
+                                        className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs ${
                                             sessionId === session.id
                                                 ? "border-slate-900 bg-slate-900 text-white"
                                                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                                         }`}
                                     >
-                                        <p className="truncate font-medium">{session.title}</p>
-                                    </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => switchSession(session.id)}
+                                            className="min-w-0 flex-1 text-left"
+                                        >
+                                            <p className="truncate font-medium">{session.title}</p>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => void deleteConversation(session.id)}
+                                            className={`rounded-md p-1 transition ${
+                                                sessionId === session.id
+                                                    ? "text-white/80 hover:bg-white/10 hover:text-white"
+                                                    : "text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                            }`}
+                                            aria-label="Delete conversation"
+                                        >
+                                            <Trash2 size={13} />
+                                        </button>
+                                    </div>
                                 ))
                             )}
                         </div>
@@ -324,17 +448,26 @@ export default function ChatPage() {
                 </>
             }
         >
-            <div className="flex flex-1 flex-col">
-                <ScrollArea className="flex-1 px-4 py-6 md:px-8">
-                    <div className="mx-auto flex max-w-4xl flex-col gap-6 pb-32">
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                <ScrollArea className="min-h-0 flex-1 overflow-hidden px-4 py-6 md:px-8">
+                    <div className="mx-auto flex max-w-4xl flex-col gap-6 pb-28">
+                        <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm">
+                            <p className="font-semibold text-blue-900">
+                                Testing Bot: {selectedNumber || "No number selected"}
+                            </p>
+                            <p className="mt-1 text-blue-800/80">
+                                {selectedBot?.intent || "No intent set for this bot yet."}
+                            </p>
+                        </div>
+
                         {messages.length === 0 && !isThinking && (
                             <div className="mt-10 rounded-3xl border border-slate-200/70 bg-white/80 p-10 text-center">
                                 <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-slate-900 text-white">
                                     <Sparkles size={24} />
                                 </div>
-                                <h2 className="text-xl font-semibold">Ask anything about your selected source</h2>
+                                <h2 className="text-xl font-semibold">Ask anything to test this bot</h2>
                                 <p className="mt-2 text-sm text-slate-500">
-                                    Upload data in Data Sources, then ask focused questions here.
+                                    Switch numbers anytime to validate each bot independently.
                                 </p>
                             </div>
                         )}
@@ -393,19 +526,19 @@ export default function ChatPage() {
                     </div>
                 </ScrollArea>
 
-                <div className="border-t border-slate-200/70 bg-white/80 px-4 py-4 backdrop-blur md:px-8">
+                <div className="sticky bottom-0 z-20 shrink-0 border-t border-slate-200/70 bg-white/95 px-4 py-4 backdrop-blur md:px-8">
                     <div className="mx-auto flex max-w-4xl items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
                         <Input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder={selectedFile ? "Ask a question about your data..." : "Select a file to start"}
-                            disabled={!selectedFile || isSending}
+                            placeholder={selectedNumber ? "Ask something to test this bot..." : "Select a bot number to start"}
+                            disabled={!selectedNumber || isSending}
                             className="h-11 border-0 bg-transparent text-sm shadow-none focus-visible:ring-0"
                         />
                         <Button
                             onClick={() => void sendMessage()}
-                            disabled={!selectedFile || !input.trim() || isSending}
+                            disabled={!selectedNumber || !input.trim() || isSending}
                             size="icon"
                             className="h-11 w-11 rounded-xl"
                         >

@@ -120,7 +120,7 @@ export function AppShell({
                     </div>
                 </aside>
 
-                <main className="flex min-h-screen flex-1 flex-col">
+                <main className="flex min-h-screen flex-1 flex-col overflow-hidden">
                     <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/80 px-4 py-3 backdrop-blur md:px-8">
                         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                             <div>
@@ -144,7 +144,7 @@ export function AppShell({
                         </div>
                     </header>
 
-                    <section className={cn("flex-1 p-5 md:p-8", contentClassName)}>{children}</section>
+                    <section className={cn("min-h-0 flex-1 overflow-hidden p-5 md:p-8", contentClassName)}>{children}</section>
                 </main>
             </div>
 

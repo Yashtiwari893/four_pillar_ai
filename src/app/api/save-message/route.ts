@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/authServer";
 
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
             row.user_id = user.id;
         }
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("messages")
             .insert([row]);
 

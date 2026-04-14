@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { generateAutoResponse } from "@/lib/autoResponder";
 import { transcribeAudio, type TranscriptionResult } from "../../../stt/mistral/route";
 import { sendWhatsAppMessage } from "@/lib/whatsappSender";
 
@@ -94,30 +93,54 @@ async function handleIncomingWebhook(req: Request, webhookId: string) {
         return NextResponse.json({ error: "Webhook number mismatch" }, { status: 400 });
     }
 
-    const { data, error: insertError } = await supabaseAdmin
+    const { data: existingMessage, error: existingError } = await supabaseAdmin
         .from("whatsapp_messages")
-        .upsert(
-            {
-                message_id: payload.messageId,
-                channel: payload.channel,
-                from_number: payload.from,
-                to_number: payload.to,
-                received_at: payload.receivedAt,
-                content_type: payload.content?.contentType,
-                content_text: payload.content?.text || payload.UserResponse,
-                sender_name: payload.whatsapp?.senderName,
-                event_type: payload.event,
-                is_in_24_window: payload.isin24window || false,
-                is_responded: payload.isResponded || false,
-                raw_payload: payload,
-                user_id: mapping.user_id,
-            },
-            { onConflict: "message_id", ignoreDuplicates: false }
-        )
-        .select();
+        .select("message_id, auto_respond_sent")
+        .eq("message_id", payload.messageId)
+        .maybeSingle();
 
-    if (insertError) {
-        throw insertError;
+    if (existingError) {
+        throw existingError;
+    }
+
+    const alreadyResponded = Boolean(existingMessage?.auto_respond_sent);
+    if (alreadyResponded) {
+        return NextResponse.json({ success: true, message: "Duplicate webhook ignored", duplicate: true, messageId: payload.messageId });
+    }
+
+    const messagePayload = {
+        message_id: payload.messageId,
+        channel: payload.channel,
+        from_number: payload.from,
+        to_number: payload.to,
+        received_at: payload.receivedAt,
+        content_type: payload.content?.contentType,
+        content_text: payload.content?.text || payload.UserResponse,
+        sender_name: payload.whatsapp?.senderName,
+        event_type: payload.event,
+        is_in_24_window: payload.isin24window || false,
+        is_responded: payload.isResponded || false,
+        raw_payload: payload,
+        user_id: mapping.user_id,
+    };
+
+    if (existingMessage) {
+        const { error: updateError } = await supabaseAdmin
+            .from("whatsapp_messages")
+            .update(messagePayload)
+            .eq("message_id", payload.messageId);
+
+        if (updateError) {
+            throw updateError;
+        }
+    } else {
+        const { error: insertError } = await supabaseAdmin
+            .from("whatsapp_messages")
+            .insert(messagePayload);
+
+        if (insertError) {
+            throw insertError;
+        }
     }
 
     await supabaseAdmin
@@ -127,8 +150,6 @@ async function handleIncomingWebhook(req: Request, webhookId: string) {
         })
         .eq("webhook_id", webhookId);
 
-    const existingMessage = data?.[0];
-    const alreadyResponded = existingMessage?.auto_respond_sent;
     let messageText = payload.content?.text || payload.UserResponse;
     const isVoiceMessage = payload.content?.contentType === "media" &&
         (payload.content?.media?.type === "audio" || payload.content?.media?.type === "voice");
@@ -169,26 +190,28 @@ async function handleIncomingWebhook(req: Request, webhookId: string) {
     }
 
     if (messageText && payload.event === "MoMessage" && !alreadyResponded) {
-        const result = await generateAutoResponse(
-            payload.from,
-            payload.to,
-            messageText,
-            payload.messageId,
-            payload.whatsapp?.senderName
-        );
+        const autoRespondUrl = new URL("/api/whatsapp/auto-respond", req.url);
+        const internalToken = process.env.INTERNAL_WEBHOOK_TOKEN;
 
-        if (result.success) {
-            await supabaseAdmin
-                .from("whatsapp_messages")
-                .update({
-                    auto_respond_sent: true,
-                    response_sent_at: new Date().toISOString(),
-                })
-                .eq("message_id", payload.messageId);
-        }
+        void fetch(autoRespondUrl.toString(), {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...(internalToken ? { "x-internal-webhook-token": internalToken } : {}),
+            },
+            body: JSON.stringify({
+                from_number: payload.from,
+                to_number: payload.to,
+                message: messageText,
+                message_id: payload.messageId,
+                sender_name: payload.whatsapp?.senderName,
+            }),
+        }).catch((enqueueError) => {
+            console.error("Failed to enqueue auto-response:", enqueueError);
+        });
     }
 
-    return NextResponse.json({ success: true, message: "Webhook processed", data: data?.[0] });
+    return NextResponse.json({ success: true, message: "Webhook processed", data: { message_id: payload.messageId } });
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ webhookId: string }> }) {

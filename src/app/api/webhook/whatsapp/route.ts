@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
-import { generateAutoResponse } from "@/lib/autoResponder";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import OpenAI from "openai";
 // import speech from "@google-cloud/speech";
 
@@ -96,41 +95,63 @@ export async function POST(req: Request) {
             );
         }
 
-        // Insert or update message in database (handle duplicates)
-        const { data, error } = await supabase
+        const { data: existingMessage, error: existingError } = await supabaseAdmin
             .from("whatsapp_messages")
-            .upsert(
-                {
-                    message_id: payload.messageId,
-                    channel: payload.channel,
-                    from_number: payload.from,
-                    to_number: payload.to,
-                    received_at: payload.receivedAt,
-                    content_type: payload.content?.contentType,
-                    content_text: payload.content?.text || payload.UserResponse, // Initial text, will update if voice
-                    sender_name: payload.whatsapp?.senderName,
-                    event_type: payload.event,
-                    is_in_24_window: payload.isin24window || false,
-                    is_responded: payload.isResponded || false,
-                    raw_payload: payload,
-                },
-                {
-                    onConflict: "message_id",
-                    ignoreDuplicates: false
-                }
-            )
-            .select();
+            .select("message_id, auto_respond_sent")
+            .eq("message_id", payload.messageId)
+            .maybeSingle();
 
-        if (error) {
-            console.error("Database error:", error);
-            throw error;
+        if (existingError) {
+            console.error("Database lookup error:", existingError);
+            throw existingError;
         }
 
-        console.log("Message stored/updated successfully:", data);
+        const alreadyResponded = Boolean(existingMessage?.auto_respond_sent);
+        if (alreadyResponded) {
+            console.log("Skipping duplicate webhook - response already sent for message:", payload.messageId);
+            return NextResponse.json({
+                success: true,
+                message: "Duplicate webhook ignored",
+                duplicate: true,
+                messageId: payload.messageId,
+            });
+        }
 
-        // Check if this message has already been responded to
-        const existingMessage = data?.[0];
-        const alreadyResponded = existingMessage?.auto_respond_sent;
+        const messagePayload = {
+            message_id: payload.messageId,
+            channel: payload.channel,
+            from_number: payload.from,
+            to_number: payload.to,
+            received_at: payload.receivedAt,
+            content_type: payload.content?.contentType,
+            content_text: payload.content?.text || payload.UserResponse,
+            sender_name: payload.whatsapp?.senderName,
+            event_type: payload.event,
+            is_in_24_window: payload.isin24window || false,
+            is_responded: payload.isResponded || false,
+            raw_payload: payload,
+        };
+
+        if (existingMessage) {
+            const { error: updateError } = await supabaseAdmin
+                .from("whatsapp_messages")
+                .update(messagePayload)
+                .eq("message_id", payload.messageId);
+
+            if (updateError) {
+                console.error("Database update error:", updateError);
+                throw updateError;
+            }
+        } else {
+            const { error: insertError } = await supabaseAdmin
+                .from("whatsapp_messages")
+                .insert(messagePayload);
+
+            if (insertError) {
+                console.error("Database insert error:", insertError);
+                throw insertError;
+            }
+        }
 
         // Determine message text - handle both text and voice messages
         let messageText = payload.content?.text || payload.UserResponse;
@@ -147,21 +168,21 @@ export async function POST(req: Request) {
             event: payload.event
         });
 
-        // Helper: send fallback reply when transcription fails or when outside 24h
+        // Helper: send a one-time fallback only when voice transcription fails.
         async function sendFallbackForVoice() {
             try {
                 // Get auth credentials for this business number
-                const { data: mapping } = await supabase
+                const { data: mapping } = await supabaseAdmin
                     .from("phone_document_mapping")
                     .select("*")
                     .eq("phone_number", payload.to)
-                    .single();
+                    .maybeSingle();
 
                 const authToken = mapping?.auth_token;
                 const origin = mapping?.origin;
 
                 // Mark original message as responded
-                await supabase
+                await supabaseAdmin
                     .from("whatsapp_messages")
                     .update({
                         auto_respond_sent: true,
@@ -169,22 +190,14 @@ export async function POST(req: Request) {
                     })
                     .eq("message_id", payload.messageId);
 
-                await supabase
-                    .from("whatsapp_messages")
-                    .insert([{
-                        message_id: `auto_${payload.messageId}_${Date.now()}`,
-                        channel: "whatsapp",
-                        from_number: payload.to,
-                        to_number: payload.from,
-                        received_at: new Date().toISOString(),
-                        content_type: "text",
-                        sender_name: "AI Assistant",
-                        event_type: "MtMessage",
-                        is_in_24_window: false,
-                        is_responded: false,
-                        auto_respond_sent: true,
-                        raw_payload: { messageId: payload.messageId, isAutoResponse: true }
-                    }]);
+                if (authToken && origin) {
+                    await sendWhatsAppMessage(
+                        payload.from,
+                        "I could not transcribe your voice note this time. Please resend it as text.",
+                        authToken,
+                        origin
+                    );
+                }
 
             } catch (err) {
                 console.error("Error sending fallback for voice message:", err);
@@ -199,7 +212,7 @@ export async function POST(req: Request) {
                 console.log("Using transcribed text for auto-response");
 
                 // Update the database with transcribed text and transcription details
-                await supabase
+                await supabaseAdmin
                     .from("whatsapp_messages")
                     .update({
                         content_text: messageText,
@@ -222,97 +235,24 @@ export async function POST(req: Request) {
             console.log("Processing auto-response for message:", payload.messageId);
             console.log("Message will be 24-hour window processed:", true);
 
-            try {
-                // ALWAYS try to generate a proper auto-response for user messages
-                const result = await generateAutoResponse(
-                    payload.from,
-                    payload.to,
-                    messageText,
-                    payload.messageId,
-                    payload.whatsapp?.senderName
-                );
-
-                if (result.success) {
-                    console.log("✅ Auto-response sent successfully");
-
-                    // Mark the message as responded in the database
-                    await supabase
-                        .from("whatsapp_messages")
-                        .update({
-                            auto_respond_sent: true,
-                            response_sent_at: new Date().toISOString()
-                        })
-                        .eq("message_id", payload.messageId);
-
-                } else {
-                    console.error("❌ Auto-response generation failed:", result.error);
-                    
-                    // If auto-response fails, send a helpful error message
-                    try {
-                        const { data: mapping } = await supabase
-                            .from("phone_document_mapping")
-                            .select("*")
-                            .eq("phone_number", payload.to)
-                            .single();
-
-                        const authToken = mapping?.auth_token;
-                        const origin = mapping?.origin;
-
-                        if (authToken && origin) {
-                            await sendWhatsAppMessage(
-                                payload.from,
-                                "Hi! 👋 I received your message. I'm processing your request. Please try again in a moment if you don't hear back.",
-                                authToken,
-                                origin
-                            );
-                        }
-
-                        // Log the failed attempt but mark as responded
-                        await supabase
-                            .from("whatsapp_messages")
-                            .update({
-                                auto_respond_sent: true,
-                                response_sent_at: new Date().toISOString()
-                            })
-                            .eq("message_id", payload.messageId);
-                    } catch (err) {
-                        console.error("Error sending fallback message:", err);
-                    }
-                }
-            } catch (err) {
-                console.error("Unexpected error in auto-response processing:", err);
-                
-                // Send a friendly error message
-                try {
-                    const { data: mapping } = await supabase
-                        .from("phone_document_mapping")
-                        .select("*")
-                        .eq("phone_number", payload.to)
-                        .single();
-
-                    const authToken = mapping?.auth_token;
-                    const origin = mapping?.origin;
-
-                    if (authToken && origin) {
-                        await sendWhatsAppMessage(
-                            payload.from,
-                            "Hi! 👋 I received your message. Please give me a moment to process it.",
-                            authToken,
-                            origin
-                        );
-                    }
-
-                    await supabase
-                        .from("whatsapp_messages")
-                        .update({
-                            auto_respond_sent: true,
-                            response_sent_at: new Date().toISOString()
-                        })
-                        .eq("message_id", payload.messageId);
-                } catch (innerErr) {
-                    console.error("Error sending emergency fallback:", innerErr);
-                }
-            }
+            const autoRespondUrl = new URL("/api/whatsapp/auto-respond", req.url);
+            const internalToken = process.env.INTERNAL_WEBHOOK_TOKEN;
+            void fetch(autoRespondUrl.toString(), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(internalToken ? { "x-internal-webhook-token": internalToken } : {}),
+                },
+                body: JSON.stringify({
+                    from_number: payload.from,
+                    to_number: payload.to,
+                    message: messageText,
+                    message_id: payload.messageId,
+                    sender_name: payload.whatsapp?.senderName,
+                }),
+            }).catch((enqueueError) => {
+                console.error("Failed to enqueue auto-response:", enqueueError);
+            });
         } else if (alreadyResponded) {
             console.log("Skipping auto-response - already sent for message:", payload.messageId);
         }
@@ -320,7 +260,7 @@ export async function POST(req: Request) {
         return NextResponse.json({
             success: true,
             message: "WhatsApp message received and stored",
-            data: data?.[0],
+            data: { message_id: payload.messageId },
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error";

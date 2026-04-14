@@ -264,71 +264,50 @@ export async function generateAutoResponse(
             await updateUserConversationStage(fromNumber, toNumber, newStage, newInfo, firstMessageSent);
         }
 
-        // 12. Send the response via WhatsApp (Splitting into multiple messages if long)
-        // We split by double newlines or single newlines if paragraphs are long
-        const messageChunks = response
-            .split(/\n\n+/)
-            .map(chunk => chunk.trim())
-            .filter(chunk => chunk.length > 0);
-
-        console.log(`Splitting response into ${messageChunks.length} chunks`);
-
-        let allSent = true;
-        let lastError = "";
-
-        for (let i = 0; i < messageChunks.length; i++) {
-            const chunk = messageChunks[i];
-            
-            // Send to WhatsApp
-            const sendResult = await sendWhatsAppMessage(fromNumber, chunk, auth_token, origin);
-            
-            if (sendResult.success) {
-                // Store each chunk in the database
-                const responseMessageId = `auto_${messageId}_${Date.now()}_${i}`;
-                await supabaseAdmin
-                    .from("whatsapp_messages")
-                    .insert([
-                        {
-                            message_id: responseMessageId,
-                            channel: "whatsapp",
-                            from_number: toNumber,
-                            to_number: fromNumber,
-                            received_at: new Date().toISOString(),
-                            content_type: "text",
-                            content_text: chunk,
-                            sender_name: "AI Assistant",
-                            event_type: "MtMessage",
-                            is_in_24_window: true,
-                            is_responded: false,
-                            auto_respond_sent: false,
-                            raw_payload: {
-                                messageId: responseMessageId,
-                                isAutoResponse: true,
-                                chunkIndex: i
-                            },
-                        },
-                    ]);
-                
-                // Add a small delay between messages to simulate typing (except for the last message)
-                if (i < messageChunks.length - 1) {
-                    const delay = Math.min(1500, 800 + (chunk.length * 5)); // Dynamic delay based on length
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            } else {
-                allSent = false;
-                lastError = sendResult.error || "Unknown error";
-                console.error(`Failed to send chunk ${i}:`, lastError);
-            }
-        }
-
-        if (!allSent && messageChunks.length > 0) {
+        // 12. Send exactly one response message per inbound user message.
+        const outboundText = response.replace(/\n{3,}/g, "\n\n").trim();
+        if (!outboundText) {
             return {
                 success: false,
-                response,
                 sent: false,
-                error: `Failed to send some/all chunks: ${lastError}`,
+                error: "Empty response generated",
             };
         }
+
+        const sendResult = await sendWhatsAppMessage(fromNumber, outboundText, auth_token, origin);
+        if (!sendResult.success) {
+            return {
+                success: false,
+                response: outboundText,
+                sent: false,
+                error: sendResult.error || "Failed to send outbound response",
+            };
+        }
+
+        const responseMessageId = `auto_${messageId}_${Date.now()}`;
+        await supabaseAdmin
+            .from("whatsapp_messages")
+            .insert([
+                {
+                    message_id: responseMessageId,
+                    channel: "whatsapp",
+                    from_number: toNumber,
+                    to_number: fromNumber,
+                    received_at: new Date().toISOString(),
+                    content_type: "text",
+                    content_text: outboundText,
+                    sender_name: "AI Assistant",
+                    event_type: "MtMessage",
+                    is_in_24_window: true,
+                    is_responded: false,
+                    auto_respond_sent: false,
+                    raw_payload: {
+                        messageId: responseMessageId,
+                        isAutoResponse: true,
+                        source_message_id: messageId,
+                    },
+                },
+            ]);
 
         // 13. Mark original message as responded
         await supabaseAdmin
@@ -339,7 +318,7 @@ export async function generateAutoResponse(
             })
             .eq("message_id", messageId);
 
-        console.log(`✅ Auto-response chunks sent successfully to ${fromNumber}`);
+        console.log(`✅ Auto-response sent successfully to ${fromNumber}`);
 
         return {
             success: true,

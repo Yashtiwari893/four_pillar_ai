@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient";
+import { supabaseAdmin } from "./supabaseAdmin";
 import { embedText } from "./embeddings";
 import { retrieveRelevantChunksForPhoneNumber } from "./retrieval";
 import { getFilesForPhoneNumber } from "./phoneMapping";
@@ -37,11 +37,11 @@ export async function generateAutoResponse(
         const startTime = Date.now();
 
         // 1. Fetch mapping first (needed for custom API keys)
-        const mappingResult = await supabase
+        const mappingResult = await supabaseAdmin
             .from("phone_document_mapping")
             .select("system_prompt, auth_token, origin, gemini_api_key, groq_api_key, mistral_api_key")
             .eq("phone_number", toNumber)
-            .single();
+            .maybeSingle();
 
         const phoneMapping = mappingResult.data;
         if (mappingResult.error || !phoneMapping) {
@@ -56,7 +56,7 @@ export async function generateAutoResponse(
         const [fileIds, queryEmbedding, historyResult, userStageData] = await Promise.all([
             getFilesForPhoneNumber(toNumber),
             embedText(messageText, 3, phoneMapping.mistral_api_key),
-            supabase
+            supabaseAdmin
                 .from("whatsapp_messages")
                 .select("content_text, event_type, from_number, to_number")
                 .or(`and(from_number.eq.${fromNumber},to_number.eq.${toNumber}),and(from_number.eq.${toNumber},to_number.eq.${fromNumber})`)
@@ -285,7 +285,7 @@ export async function generateAutoResponse(
             if (sendResult.success) {
                 // Store each chunk in the database
                 const responseMessageId = `auto_${messageId}_${Date.now()}_${i}`;
-                await supabase
+                await supabaseAdmin
                     .from("whatsapp_messages")
                     .insert([
                         {
@@ -331,7 +331,7 @@ export async function generateAutoResponse(
         }
 
         // 13. Mark original message as responded
-        await supabase
+        await supabaseAdmin
             .from("whatsapp_messages")
             .update({
                 auto_respond_sent: true,
@@ -412,12 +412,12 @@ export async function generateReminderResponse(
         
         // 1. Fetch mapping and history
         const [mappingResult, historyResult] = await Promise.all([
-            supabase
+            supabaseAdmin
                 .from("phone_document_mapping")
                 .select("system_prompt, auth_token, origin, gemini_api_key, groq_api_key, mistral_api_key")
                 .eq("phone_number", toNumber)
-                .single(),
-            supabase
+                .maybeSingle(),
+            supabaseAdmin
                 .from("whatsapp_messages")
                 .select("content_text, event_type, from_number, to_number, raw_payload")
                 .or(`and(from_number.eq.${fromNumber},to_number.eq.${toNumber}),and(from_number.eq.${toNumber},to_number.eq.${fromNumber})`)
@@ -504,7 +504,7 @@ export async function generateReminderResponse(
 
         if (sendResult.success) {
             const responseMessageId = `reminder_${fromNumber}_${Date.now()}`;
-            await supabase.from("whatsapp_messages").insert([{
+            await supabaseAdmin.from("whatsapp_messages").insert([{
                 message_id: responseMessageId,
                 channel: "whatsapp",
                 from_number: toNumber,

@@ -1,10 +1,10 @@
-import { supabase } from "./supabaseClient";
+import { supabaseAdmin } from "./supabaseAdmin";
 
 /**
  * Get all file IDs mapped to a phone number
  */
 export async function getFilesForPhoneNumber(phoneNumber: string): Promise<string[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from("phone_document_mapping")
         .select("file_id")
         .eq("phone_number", phoneNumber);
@@ -21,7 +21,7 @@ export async function getFilesForPhoneNumber(phoneNumber: string): Promise<strin
  * Check if a phone number has any document mappings
  */
 export async function hasDocumentMapping(phoneNumber: string): Promise<boolean> {
-    const { count, error } = await supabase
+    const { count, error } = await supabaseAdmin
         .from("phone_document_mapping")
         .select("*", { count: "exact", head: true })
         .eq("phone_number", phoneNumber);

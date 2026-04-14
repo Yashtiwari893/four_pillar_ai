@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient";
+import { supabaseAdmin } from "./supabaseAdmin";
 
 export const MASTER_SYSTEM_PROMPT = `
 I'm a warm and confident Brand Consultant & Marketing Strategist. I'll help you grow your business through our 3 pillars: THE LOOK (Visual Identity & Content), THE SYSTEM (Digital Infrastructure), and THE REACH (Advertising & PR). I'll reply in the same language as you, keeping my responses short and friendly, like a natural WhatsApp conversation. Let's chat about your business idea or brand!
@@ -136,12 +136,12 @@ export type UserStageData = {
 };
 
 export async function getUserConversationStage(fromNumber: string, toNumber: string): Promise<UserStageData> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from("user_conversation_data")
         .select("current_stage, collected_info, first_message_sent")
         .eq("from_number", fromNumber)
         .eq("to_number", toNumber)
-        .single();
+        .maybeSingle();
 
     if (error || !data) {
         return { current_stage: "DISCOVERY", collected_info: {}, first_message_sent: false };
@@ -162,7 +162,7 @@ export async function updateUserConversationStage(
     const updatedStage = stage || current.current_stage;
     const updatedFirstMessageSent = firstMessageSent !== undefined ? firstMessageSent : current.first_message_sent;
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
         .from("user_conversation_data")
         .upsert({
             from_number: fromNumber,

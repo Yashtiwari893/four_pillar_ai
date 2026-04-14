@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { generateAutoResponse } from "@/lib/autoResponder";
 import { transcribeAudio, type TranscriptionResult } from "../../../stt/mistral/route";
 import { sendWhatsAppMessage } from "@/lib/whatsappSender";
@@ -56,11 +56,11 @@ function getWebhookToken(req: Request) {
 }
 
 async function resolveWebhookMapping(webhookId: string) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from("phone_document_mapping")
         .select("id, user_id, phone_number, auth_token, origin, webhook_secret, webhook_enabled, webhook_last_verified_at, webhook_last_received_at")
         .eq("webhook_id", webhookId)
-        .single();
+        .maybeSingle();
 
     if (error || !data) {
         return { mapping: null, error };
@@ -94,7 +94,7 @@ async function handleIncomingWebhook(req: Request, webhookId: string) {
         return NextResponse.json({ error: "Webhook number mismatch" }, { status: 400 });
     }
 
-    const { data, error: insertError } = await supabase
+    const { data, error: insertError } = await supabaseAdmin
         .from("whatsapp_messages")
         .upsert(
             {
@@ -120,7 +120,7 @@ async function handleIncomingWebhook(req: Request, webhookId: string) {
         throw insertError;
     }
 
-    await supabase
+    await supabaseAdmin
         .from("phone_document_mapping")
         .update({
             webhook_last_received_at: new Date().toISOString(),
@@ -137,7 +137,7 @@ async function handleIncomingWebhook(req: Request, webhookId: string) {
         const transcriptionResult = await transcribeVoiceMessage(payload.content.media.url);
         if (transcriptionResult) {
             messageText = transcriptionResult.text;
-            await supabase
+            await supabaseAdmin
                 .from("whatsapp_messages")
                 .update({
                     content_text: messageText,
@@ -147,7 +147,7 @@ async function handleIncomingWebhook(req: Request, webhookId: string) {
                 })
                 .eq("message_id", payload.messageId);
         } else {
-            await supabase
+            await supabaseAdmin
                 .from("whatsapp_messages")
                 .update({
                     auto_respond_sent: true,
@@ -178,7 +178,7 @@ async function handleIncomingWebhook(req: Request, webhookId: string) {
         );
 
         if (result.success) {
-            await supabase
+            await supabaseAdmin
                 .from("whatsapp_messages")
                 .update({
                     auto_respond_sent: true,
@@ -214,7 +214,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ webhookI
     }
 
     if (mode === "subscribe" && token && mapping.webhook_secret && token === mapping.webhook_secret) {
-        await supabase
+        await supabaseAdmin
             .from("phone_document_mapping")
             .update({ webhook_last_verified_at: new Date().toISOString() })
             .eq("webhook_id", webhookId);

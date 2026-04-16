@@ -44,6 +44,8 @@
 }
 
 :root {
+  --font-space-grotesk: "Segoe UI", "Aptos", "Helvetica Neue", "Noto Sans", sans-serif;
+  --font-ibm-plex-mono: "Cascadia Code", "Consolas", "Courier New", monospace;
   --radius: 1rem;
   --background: oklch(0.99 0.005 250); /* Ultra Clean Slate 50 */
   --foreground: oklch(0.15 0.03 260); /* Professional Deep Slate (Slate 950) */

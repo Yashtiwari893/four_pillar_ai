@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getUserFromRequest } from "@/lib/authServer";
 
 // GET: Retrieve phone-document mappings
@@ -11,13 +11,13 @@ export async function GET(req: Request) {
         const phoneNumber = searchParams.get("phone_number");
         const fileId = searchParams.get("file_id");
 
-        let query = supabase
+        let query = supabaseAdmin
             .from("phone_document_view")
             .select("*")
             .order("created_at", { ascending: false });
 
         if (user) {
-            query = query.eq("user_id", user.id);
+            query = query.or(`user_id.eq.${user.id},user_id.is.null`);
         }
 
         if (phoneNumber) {
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
             );
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("phone_document_mapping")
             .insert([{ phone_number, file_id, ...(user ? { user_id: user.id } : {}) }])
             .select();
@@ -104,31 +104,78 @@ export async function DELETE(req: Request) {
             );
         }
 
-        let query = supabase
+        let precheck = supabaseAdmin
+            .from("phone_document_mapping")
+            .select("id, phone_number")
+            .limit(1);
+
+        if (user) {
+            precheck = precheck.or(`user_id.eq.${user.id},user_id.is.null`);
+        }
+
+        if (id) {
+            precheck = precheck.eq("id", id);
+        }
+
+        if (phoneNumber) {
+            precheck = precheck.eq("phone_number", phoneNumber);
+        }
+
+        const { data: existing, error: precheckError } = await precheck.maybeSingle();
+
+        if (precheckError) {
+            throw precheckError;
+        }
+
+        if (!existing) {
+            return NextResponse.json(
+                { error: "Bot profile not found" },
+                { status: 404 }
+            );
+        }
+
+        let deleteMappings = supabaseAdmin
             .from("phone_document_mapping")
             .delete();
 
         if (user) {
-            query = query.eq("user_id", user.id);
+            deleteMappings = deleteMappings.or(`user_id.eq.${user.id},user_id.is.null`);
         }
 
         if (id) {
-            query = query.eq("id", id);
+            deleteMappings = deleteMappings.eq("id", id);
         }
 
         if (phoneNumber) {
-            query = query.eq("phone_number", phoneNumber);
+            deleteMappings = deleteMappings.eq("phone_number", phoneNumber);
         }
 
-        const { error } = await query;
+        const { error: mappingDeleteError } = await deleteMappings;
+        if (mappingDeleteError) {
+            throw mappingDeleteError;
+        }
 
-        if (error) {
-            throw error;
+        // Keep integration tables in sync when deleting by phone profile.
+        if (phoneNumber) {
+            await supabaseAdmin
+                .from("google_sheet_mappings")
+                .delete()
+                .eq("phone_number", phoneNumber);
+
+            await supabaseAdmin
+                .from("google_doc_mappings")
+                .delete()
+                .eq("phone_number", phoneNumber);
+
+            await supabaseAdmin
+                .from("chunks")
+                .delete()
+                .eq("phone_number", phoneNumber);
         }
 
         return NextResponse.json({
             success: true,
-            message: "Mapping deleted successfully",
+            message: "Bot profile deleted successfully",
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error";

@@ -129,10 +129,10 @@ export async function generateAutoResponse(
         systemPrompt += `- First Message Sent: ${userStageData.first_message_sent}\n`;
         systemPrompt += `- Detected Language: ${detectedLanguage}\n`;
 
-        if (!userStageData.first_message_sent) {
-            systemPrompt += `\n\n=== FIRST MESSAGE TASK ===\n`;
-            systemPrompt += `This is your first reply ever to this user. You MUST start with the EXACT First Message defined in Section 3, then proceed to address their specific query if any.\n`;
-        }
+        systemPrompt += `\n\n=== USER INTENT PRIORITY ===\n`;
+        systemPrompt += `- The latest user message is the top priority.\n`;
+        systemPrompt += `- If intent is clear, continue on same topic and do not restart with generic intro.\n`;
+        systemPrompt += `- Ask at most one question only if needed for next step.\n`;
 
         // Add internal reporting instructions
         systemPrompt += `\n\n=== INTERNAL REPORTING (MUST INCLUDE AT THE END OF RESPONSE) ===\n`;
@@ -152,7 +152,7 @@ export async function generateAutoResponse(
         if (contextText) {
             systemPrompt += `\n\n=== CONTEXT FROM KNOWLEDGE BASE ===\n${contextText}\n`;
         } else {
-            systemPrompt += `\n\n=== NOTE ===\nNo specific context available for this query. Respond based on general knowledge and conversation history.\n`;
+            systemPrompt += `\n\n=== NO MATCHING KNOWLEDGE BASE CONTEXT ===\nIf answer is not present in context, reply EXACTLY with: Iska exact answer mere data me available nahi hai. Aap thoda aur detail share kar sakte ho?\n`;
         }
 
         // 9. Build context for the LLM
@@ -209,8 +209,8 @@ export async function generateAutoResponse(
             const completion = await localGroq.chat.completions.create({
                 model: model,
                 messages,
-                temperature: 0.7,
-                max_tokens: 1200,
+                temperature: 0.1,
+                max_tokens: 220,
             });
             return completion.choices[0].message.content || "";
         }

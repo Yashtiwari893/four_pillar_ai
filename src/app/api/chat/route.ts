@@ -75,6 +75,17 @@ export async function POST(req: Request) {
             .map((m) => ({ chunk: m.chunk || "", similarity: m.similarity }))
             .filter((m) => m.chunk.trim().length > 0);
 
+        if (contextChunks.length === 0) {
+            return new Response(
+                "Iska exact answer mere data me available nahi hai. Aap thoda aur detail share kar sakte ho?",
+                {
+                    headers: {
+                        "Content-Type": "text/plain; charset=utf-8",
+                    },
+                }
+            );
+        }
+
         // 3. Load conversation history
         let historyQuery = supabaseAdmin
             .from("messages")
@@ -119,7 +130,8 @@ export async function POST(req: Request) {
         const completion = await localGroq.chat.completions.create({
             model: "llama-3.3-70b-versatile",
             messages,
-            temperature: 0.2,
+            temperature: 0.1,
+            max_tokens: 220,
             stream: true
         });
 

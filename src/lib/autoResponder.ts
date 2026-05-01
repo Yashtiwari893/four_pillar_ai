@@ -19,12 +19,29 @@ export type AutoResponseResult = {
     error?: string;
     noDocuments?: boolean;
     sent?: boolean;
+    duplicate?: boolean;
 };
 
 function isContentCreationRequest(messageText: string) {
     const normalized = messageText.toLowerCase();
     return /\b(create|write|draft|make|generate|prepare|design|compose|craft|caption|post|blog|article|copy|ad copy|reel script|script|newsletter|content)\b/i.test(normalized)
         || /(post\s*ban|content\s*ban|caption\s*ban|blog\s*likh|article\s*likh|copy\s*likh|script\s*likh|reel\s*likh|write\s*me\s*post|make\s*me\s*post)/i.test(normalized);
+}
+
+async function hasExistingAutoResponse(sourceMessageId: string) {
+    const { data, error } = await supabaseAdmin
+        .from("whatsapp_messages")
+        .select("message_id")
+        .eq("event_type", "MtMessage")
+        .contains("raw_payload", { source_message_id: sourceMessageId })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error("AUTO_RESPONDER_DUPLICATE_LOOKUP_ERROR:", error);
+    }
+
+    return Boolean(data);
 }
 
 /**
@@ -41,6 +58,23 @@ export async function generateAutoResponse(
     try {
         console.log(`--- Starting Fast Auto-Response for ${toNumber} ---`);
         const startTime = Date.now();
+
+        if (await hasExistingAutoResponse(messageId)) {
+            await supabaseAdmin
+                .from("whatsapp_messages")
+                .update({
+                    auto_respond_sent: true,
+                    response_sent_at: new Date().toISOString(),
+                })
+                .eq("message_id", messageId);
+
+            return {
+                success: true,
+                duplicate: true,
+                sent: false,
+                response: "",
+            };
+        }
 
         // 1. Fetch mapping first (needed for custom API keys)
         const mappingResult = await supabaseAdmin

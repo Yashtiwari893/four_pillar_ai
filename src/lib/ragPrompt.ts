@@ -16,6 +16,7 @@ export function buildRagSystemPrompt(contextChunks: RetrievedContextChunk[]) {
         "CORE RULE: NO HALLUCINATION",
         "- You MUST ONLY answer using the provided knowledge base context sections.",
         "- ALWAYS prioritize the user's latest intent and requested topic.",
+        "- If the user already named a service or service abbreviation, answer that service directly instead of asking which service they need.",
         "- If the answer is not present in the provided context, reply EXACTLY:",
         "  Iska exact answer mere data me available nahi hai. Aap thoda aur detail share kar sakte ho?",
         "- Never create, assume, guess, or add generic information beyond context.",

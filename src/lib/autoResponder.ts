@@ -22,11 +22,7 @@ export type AutoResponseResult = {
     duplicate?: boolean;
 };
 
-function isContentCreationRequest(messageText: string) {
-    const normalized = messageText.toLowerCase();
-    return /\b(create|write|draft|make|generate|prepare|design|compose|craft|caption|post|blog|article|copy|ad copy|reel script|script|newsletter|content)\b/i.test(normalized)
-        || /(post\s*ban|content\s*ban|caption\s*ban|blog\s*likh|article\s*likh|copy\s*likh|script\s*likh|reel\s*likh|write\s*me\s*post|make\s*me\s*post)/i.test(normalized);
-}
+
 
 async function hasExistingAutoResponse(sourceMessageId: string) {
     const { data, error } = await supabaseAdmin
@@ -134,58 +130,8 @@ export async function generateAutoResponse(
             };
         }
 
-        if (isContentCreationRequest(messageText)) {
-            const refusalText =
-                "Main original post/caption/blog content generate nahi karunga. Agar aap chaho to main aapke diye hue exact points ko clear karne, refine karne, ya response format karne mein help kar sakta hoon.";
-
-            const sendResult = await sendWhatsAppMessage(fromNumber, refusalText, auth_token, origin);
-            if (!sendResult.success) {
-                return {
-                    success: false,
-                    error: sendResult.error || "Failed to send validation reply",
-                };
-            }
-
-            const responseMessageId = `auto_${messageId}_${Date.now()}`;
-            await supabaseAdmin
-                .from("whatsapp_messages")
-                .insert([
-                    {
-                        message_id: responseMessageId,
-                        channel: "whatsapp",
-                        from_number: toNumber,
-                        to_number: fromNumber,
-                        received_at: new Date().toISOString(),
-                        content_type: "text",
-                        content_text: refusalText,
-                        sender_name: "AI Assistant",
-                        event_type: "MtMessage",
-                        is_in_24_window: true,
-                        is_responded: false,
-                        auto_respond_sent: false,
-                        raw_payload: {
-                            messageId: responseMessageId,
-                            isAutoResponse: true,
-                            source_message_id: messageId,
-                            validation_blocked: true,
-                        },
-                    },
-                ]);
-
-            await supabaseAdmin
-                .from("whatsapp_messages")
-                .update({
-                    auto_respond_sent: true,
-                    response_sent_at: new Date().toISOString(),
-                })
-                .eq("message_id", messageId);
-
-            return {
-                success: true,
-                response: refusalText,
-                sent: true,
-            };
-        }
+        // Content creation requests are now handled by the LLM system prompt
+        // which distinguishes between asking about services vs asking to generate content.
 
         // 2. Vector Search (Depends on embedding)
         const matches = await retrieveRelevantChunksForPhoneNumber(
